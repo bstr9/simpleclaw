@@ -33,7 +33,7 @@ simpleclaw/
 │   ├── bridge/              # 渠道-LLM桥接，消息路由
 │   ├── channel/             # 10渠道 → 见 pkg/channel/AGENTS.md
 │   ├── llm/                 # 15+ LLM → 见 pkg/llm/AGENTS.md
-│   ├── plugin/              # 10插件 → 见 pkg/plugin/AGENTS.md
+│   ├── plugin/              # 9插件 → 见 pkg/plugin/AGENTS.md
 │   ├── voice/               # 9语音平台 → 见 pkg/voice/AGENTS.md
 │   ├── types/               # 核心类型 (Context, Reply, Message)
 │   ├── config/              # 配置加载，工具配置
@@ -132,9 +132,9 @@ terminal, web, feishu, dingtalk, weixin, wechatmp, wechatcom, wecombot, qq
 
 ---
 
-## TOOLS (12)
+## TOOLS (14)
 
-read, write, edit, ls, bash, web_search, web_fetch, browser, memory, scheduler, vision, time
+read, write, edit, ls, bash, web_search, web_fetch, browser, memory, scheduler, vision, time, env_config, send
 
 ---
 

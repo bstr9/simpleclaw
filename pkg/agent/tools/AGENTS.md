@@ -26,6 +26,8 @@
 | scheduler | scheduler.go | 定时任务 |
 | vision | vision.go | 图像识别 |
 | time | time.go | 时间工具 |
+| env_config | env_config.go | 环境变量和API密钥管理 |
+| send | send.go | 发送文件给用户 |
 
 ---
 

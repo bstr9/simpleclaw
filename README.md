@@ -132,6 +132,8 @@ simpleclaw/
 | scheduler | 定时任务管理 |
 | vision | 图像识别 |
 | time | 获取当前时间 |
+| env_config | 管理环境变量和API密钥 |
+| send | 发送文件给用户 |
 
 ## 开发
 
