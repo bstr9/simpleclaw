@@ -187,7 +187,8 @@ func (w *WSClient) processMessageAsync(feishuMsg *FeishuMessage) {
 			if err != nil {
 				logger.Error("[Feishu WS] Failed to start pair", zap.Error(err))
 			} else {
-				replyMsg := fmt.Sprintf("请先授权以使用完整功能：\n%s", pairStart.AuthURL)
+				// 使用 Markdown 格式的可点击链接
+				replyMsg := fmt.Sprintf("🔐 请先授权以使用完整功能\n\n[👉 点击授权](%s)", pairStart.AuthURL)
 				reply := &types.Reply{Type: types.ReplyText, Content: replyMsg}
 				if sendErr := w.channel.Send(reply, msgCtx); sendErr != nil {
 					logger.Error("[Feishu WS] 发送配对链接失败", zap.Error(sendErr))

@@ -67,13 +67,13 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	}
 
 	var result struct {
-		VerificationURI string `json:"verification_uri"`
+		VerificationURL string `json:"verification_url"`
 		UserCode        string `json:"user_code"`
 		DeviceCode      string `json:"device_code"`
 	}
 
-	if err := json.Unmarshal(output, &result); err == nil && result.VerificationURI != "" {
-		return result.VerificationURI, nil
+	if err := json.Unmarshal(output, &result); err == nil && result.VerificationURL != "" {
+		return result.VerificationURL, nil
 	}
 
 	re := regexp.MustCompile(`https://[^\s"\}]+`)
