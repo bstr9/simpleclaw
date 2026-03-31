@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/bstr9/simpleclaw/pkg/pair"
 )
 
 const (
@@ -16,12 +18,6 @@ const (
 	StatusActive      = "active"
 	StatusExpired     = "expired"
 )
-
-type PairStatus struct {
-	Paired    bool      `json:"paired"`
-	Status    string    `json:"status"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"`
-}
 
 type FeishuProvider struct {
 	appID     string
@@ -100,7 +96,7 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	return "", fmt.Errorf("could not extract auth URL from output: %s", string(output))
 }
 
-func (p *FeishuProvider) CheckStatus(userID string) (PairStatus, error) {
+func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -115,7 +111,7 @@ func (p *FeishuProvider) CheckStatus(userID string) (PairStatus, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
-		return PairStatus{Paired: false, Status: StatusPendingPair}, nil
+		return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
 	}
 
 	var status struct {
@@ -126,19 +122,19 @@ func (p *FeishuProvider) CheckStatus(userID string) (PairStatus, error) {
 	}
 
 	if err := json.Unmarshal(output, &status); err != nil {
-		return PairStatus{Paired: false, Status: StatusPendingPair}, nil
+		return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
 	}
 
 	if status.TokenStatus == "valid" {
 		expiresAt, _ := time.Parse(time.RFC3339, status.ExpiresAt)
-		return PairStatus{
+		return pair.PairStatus{
 			Paired:    true,
 			Status:    StatusActive,
 			ExpiresAt: expiresAt,
 		}, nil
 	}
 
-	return PairStatus{Paired: false, Status: StatusPendingPair}, nil
+	return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
 }
 
 func (p *FeishuProvider) IsUserAuthorized(userID string) (bool, error) {

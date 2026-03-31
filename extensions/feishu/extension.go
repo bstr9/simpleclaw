@@ -16,6 +16,8 @@ import (
 	"github.com/bstr9/simpleclaw/pkg/config"
 	"github.com/bstr9/simpleclaw/pkg/extension"
 	"github.com/bstr9/simpleclaw/pkg/logger"
+	"github.com/bstr9/simpleclaw/pkg/pair"
+	"github.com/bstr9/simpleclaw/pkg/pair/providers"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +32,7 @@ func init() {
 type FeishuExtension struct {
 	mu           sync.RWMutex
 	channel      *feishu.FeishuChannel
+	pairManager  *pair.Manager
 	api          extension.ExtensionAPI
 	started      bool
 	extensionDir string
@@ -101,6 +104,11 @@ func (e *FeishuExtension) Startup(ctx context.Context) error {
 
 	logger.Info("[FeishuExtension] Starting extension")
 
+	// 初始化 PairManager
+	if err := e.initPairManager(); err != nil {
+		logger.Warn("[FeishuExtension] PairManager 初始化失败", zap.Error(err))
+	}
+
 	// 检测环境状态
 	larkTool := tools.NewLarkCLITool()
 	status := larkTool.Status()
@@ -126,6 +134,27 @@ func (e *FeishuExtension) Startup(ctx context.Context) error {
 
 	e.started = true
 
+	return nil
+}
+
+func (e *FeishuExtension) initPairManager() error {
+	workspaceDir := config.Get().AgentWorkspace
+	if workspaceDir == "" {
+		workspaceDir = "./data/workspace"
+	}
+
+	store, err := pair.NewStore(workspaceDir)
+	if err != nil {
+		return fmt.Errorf("创建 PairStore 失败: %w", err)
+	}
+
+	e.pairManager = pair.NewManager(store)
+
+	cfg := config.Get()
+	feishuProvider := providers.NewFeishuProvider(cfg.FeishuAppID, cfg.FeishuAppSecret)
+	e.pairManager.RegisterProvider(feishuProvider)
+
+	logger.Info("[FeishuExtension] PairManager 初始化完成")
 	return nil
 }
 
@@ -281,9 +310,41 @@ func (e *FeishuExtension) createChannel() (*feishu.FeishuChannel, error) {
 
 	e.channel = feishu.NewFeishuChannel(feishuConfig)
 
+	if e.pairManager != nil {
+		e.channel.SetPairManager(&pairManagerAdapter{e.pairManager})
+	}
+
 	logger.Info("[FeishuExtension] Channel created",
 		zap.String("app_id", feishuConfig.AppID),
 		zap.String("event_mode", feishuConfig.EventMode))
 
 	return e.channel, nil
+}
+
+type pairManagerAdapter struct {
+	*pair.Manager
+}
+
+func (a *pairManagerAdapter) CheckSessionPair(sessionID, userID, channelType string) (*feishu.PairCheckResult, error) {
+	status, err := a.Manager.CheckSessionPair(sessionID, userID, channelType)
+	if err != nil {
+		return nil, err
+	}
+	return &feishu.PairCheckResult{
+		Paired:  status.Paired,
+		Status:  status.Status,
+		AuthURL: status.AuthURL,
+	}, nil
+}
+
+func (a *pairManagerAdapter) StartPair(sessionID, userID, channelType string) (*feishu.PairResult, error) {
+	result, err := a.Manager.StartPair(sessionID, userID, channelType)
+	if err != nil {
+		return nil, err
+	}
+	return &feishu.PairResult{
+		Success: result.Success,
+		AuthURL: result.AuthURL,
+		Message: result.Message,
+	}, nil
 }
