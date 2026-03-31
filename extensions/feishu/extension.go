@@ -80,14 +80,6 @@ func (e *FeishuExtension) Register(api extension.ExtensionAPI) error {
 	api.RegisterTool(larkCLITool)
 	logger.Info("[FeishuExtension] lark_cli tool registered")
 
-	// 注册飞书文档工具（旧版 API，保持兼容）
-	cfg := config.Get()
-	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
-		docTool := tools.NewFeishuDocTool(cfg.FeishuAppID, cfg.FeishuAppSecret)
-		api.RegisterTool(docTool)
-		logger.Info("[FeishuExtension] Doc tool registered")
-	}
-
 	logger.Info("[FeishuExtension] Extension registered")
 	return nil
 }
