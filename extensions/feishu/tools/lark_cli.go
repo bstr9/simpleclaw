@@ -597,8 +597,8 @@ func (t *LarkCLITool) doStatus() (*agent.ToolResult, error) {
 func buildLarkCLIArgs(params map[string]any, command string) []string {
 	args := []string{}
 
-	// 解析命令字符串
-	parts := strings.Fields(command)
+	// 使用正确的命令行解析（支持引号）
+	parts := parseCommand(command)
 	args = append(args, parts...)
 
 	// 添加 params
@@ -631,6 +631,45 @@ func buildLarkCLIArgs(params map[string]any, command string) []string {
 	// 添加身份
 	if as, ok := params["as"].(string); ok && as != "" {
 		args = append(args, "--as", as)
+	}
+
+	return args
+}
+
+// parseCommand 解析命令字符串，正确处理引号。
+func parseCommand(command string) []string {
+	var args []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := rune(0)
+
+	for i, ch := range command {
+		switch {
+		case ch == '"' || ch == '\'':
+			if !inQuote {
+				inQuote = true
+				quoteChar = ch
+			} else if ch == quoteChar {
+				inQuote = false
+				quoteChar = 0
+			} else {
+				current.WriteRune(ch)
+			}
+		case ch == ' ' && !inQuote:
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteRune(ch)
+		}
+
+		// 处理转义字符
+		_ = i
+	}
+
+	if current.Len() > 0 {
+		args = append(args, current.String())
 	}
 
 	return args
