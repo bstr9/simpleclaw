@@ -245,19 +245,23 @@ type streamCardHandler struct {
 }
 
 func (h *streamCardHandler) ProcessMessage(ctx context.Context, msg *FeishuMessage) (*types.Reply, error) {
+	var reply *types.Reply
 	var err error
 
 	if processor, ok := h.inner.(interface {
 		ProcessMessageWithStream(ctx context.Context, msg *FeishuMessage, onEvent func(event map[string]any)) (*types.Reply, error)
 	}); ok {
-		_, err = processor.ProcessMessageWithStream(ctx, msg, h.onEvent)
+		reply, err = processor.ProcessMessageWithStream(ctx, msg, h.onEvent)
 	} else {
-		_, err = h.inner.ProcessMessage(ctx, msg)
+		reply, err = h.inner.ProcessMessage(ctx, msg)
 	}
 
 	h.cardCtrl.Complete()
 
-	return nil, err
+	if h.cardCtrl.HasContent() {
+		return nil, err
+	}
+	return reply, err
 }
 
 // processWithStreamPost 使用 post 消息的流式处理（备用）

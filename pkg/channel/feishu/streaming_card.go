@@ -90,6 +90,13 @@ func (c *StreamingCardController) Complete() {
 	c.flush()
 }
 
+// HasContent 检查是否有累积的内容
+func (c *StreamingCardController) HasContent() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cardMsgID != "" && c.accumulated != ""
+}
+
 // shouldFlushLocked 判断是否应该刷新（调用前已持有锁）
 func (c *StreamingCardController) shouldFlushLocked() bool {
 	if c.phase == PhaseCompleted {
