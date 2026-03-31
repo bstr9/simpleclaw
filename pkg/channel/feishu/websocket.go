@@ -203,6 +203,66 @@ func (w *WSClient) processMessageAsync(feishuMsg *FeishuMessage) {
 }
 
 func (w *WSClient) processWithStream(feishuMsg *FeishuMessage, msgCtx *types.Context) (*types.Reply, error) {
+	receiver, _ := msgCtx.GetString("receiver")
+	receiveIDType, _ := msgCtx.GetString("receive_id_type")
+	sessionID, _ := msgCtx.GetString("session_id")
+
+	cardController := NewStreamingCardController(w.channel, feishuMsg, map[string]any{
+		"receiver":        receiver,
+		"receive_id_type": receiveIDType,
+		"session_id":      sessionID,
+	})
+
+	onEvent := func(event map[string]any) {
+		eventType, _ := event["type"].(string)
+		if eventType != "text" {
+			return
+		}
+
+		text, _ := event["text"].(string)
+		if text == "" {
+			return
+		}
+
+		cardController.UpdateText(text)
+	}
+
+	streamHandler := &streamCardHandler{
+		inner:     w.channel.messageHandler,
+		onEvent:   onEvent,
+		feishuMsg: feishuMsg,
+		cardCtrl:  cardController,
+	}
+
+	return streamHandler.ProcessMessage(context.Background(), feishuMsg)
+}
+
+type streamCardHandler struct {
+	inner     FeishuMessageProcessor
+	onEvent   func(event map[string]any)
+	feishuMsg *FeishuMessage
+	cardCtrl  *StreamingCardController
+}
+
+func (h *streamCardHandler) ProcessMessage(ctx context.Context, msg *FeishuMessage) (*types.Reply, error) {
+	var reply *types.Reply
+	var err error
+
+	if processor, ok := h.inner.(interface {
+		ProcessMessageWithStream(ctx context.Context, msg *FeishuMessage, onEvent func(event map[string]any)) (*types.Reply, error)
+	}); ok {
+		reply, err = processor.ProcessMessageWithStream(ctx, msg, h.onEvent)
+	} else {
+		reply, err = h.inner.ProcessMessage(ctx, msg)
+	}
+
+	h.cardCtrl.Complete()
+
+	return reply, err
+}
+
+// processWithStreamPost 使用 post 消息的流式处理（备用）
+func (w *WSClient) processWithStreamPost(feishuMsg *FeishuMessage, msgCtx *types.Context) (*types.Reply, error) {
 	var lastContent string
 	var sentMsgID string
 

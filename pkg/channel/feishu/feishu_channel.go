@@ -619,6 +619,118 @@ func (f *FeishuChannel) UpdateStreamMessage(msgID, content string) error {
 	return nil
 }
 
+// SendStreamCard 发送流式卡片消息
+func (f *FeishuChannel) SendStreamCard(feishuMsg *FeishuMessage, content string, ctx map[string]any) (string, error) {
+	accessToken, err := f.getAccessToken()
+	if err != nil {
+		return "", fmt.Errorf(errGetAccessToken, err)
+	}
+
+	receiveIDType := idTypeOpenID
+	receiver := feishuMsg.SenderOpenID
+
+	if feishuMsg.IsGroupChat {
+		receiveIDType = idTypeChatID
+		receiver = feishuMsg.ChatID
+	}
+
+	url := fmt.Sprintf("%s/im/v1/messages?receive_id_type=%s", feishuAPIBase, receiveIDType)
+
+	data := map[string]string{
+		"receive_id": receiver,
+		"msg_type":   "interactive",
+		"content":    buildStreamingCard(content, false),
+	}
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf(errMarshalRequest, err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf(errCreateRequest, err)
+	}
+
+	req.Header.Set("Authorization", common.AuthPrefixBearer+accessToken)
+	req.Header.Set(common.HeaderContentType, common.ContentTypeJSON)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf(errRequestFailed, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			MessageID string `json:"message_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf(errParseResponse, err)
+	}
+
+	if result.Code != 0 {
+		return "", fmt.Errorf("feishu api error: code=%d", result.Code)
+	}
+
+	return result.Data.MessageID, nil
+}
+
+// UpdateStreamCard 更新流式卡片消息
+func (f *FeishuChannel) UpdateStreamCard(msgID, content string, isComplete bool) error {
+	accessToken, err := f.getAccessToken()
+	if err != nil {
+		return fmt.Errorf(errGetAccessToken, err)
+	}
+
+	url := fmt.Sprintf("%s/im/v1/messages/%s", feishuAPIBase, msgID)
+
+	data := map[string]string{
+		"msg_type": "interactive",
+		"content":  buildStreamingCard(content, isComplete),
+	}
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf(errMarshalRequest, err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf(errCreateRequest, err)
+	}
+
+	req.Header.Set("Authorization", common.AuthPrefixBearer+accessToken)
+	req.Header.Set(common.HeaderContentType, common.ContentTypeJSON)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf(errRequestFailed, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		Code int `json:"code"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf(errParseResponse, err)
+	}
+
+	if result.Code != 0 {
+		return fmt.Errorf("feishu api error: code=%d", result.Code)
+	}
+
+	return nil
+}
+
 // getAccessToken 获取或刷新访问令牌
 func (f *FeishuChannel) getAccessToken() (string, error) {
 	f.tokenMu.RLock()
