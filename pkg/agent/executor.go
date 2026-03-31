@@ -120,6 +120,10 @@ func (e *executor) handleNoToolCalls(response *llm.Response, step int) (string, 
 		"status": "completed",
 	})
 
+	emitEvent(e.onEvent, EventTypeText, map[string]any{
+		"text": response.Content,
+	})
+
 	emitEvent(e.onEvent, EventTypeComplete, map[string]any{
 		"response": response.Content,
 	})
