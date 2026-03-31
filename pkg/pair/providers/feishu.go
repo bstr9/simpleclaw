@@ -76,7 +76,7 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 		return result.VerificationURI, nil
 	}
 
-	re := regexp.MustCompile(`https://[^\s]+`)
+	re := regexp.MustCompile(`https://[^\s"\}]+`)
 	if match := re.FindString(string(output)); match != "" {
 		return match, nil
 	}
@@ -85,7 +85,7 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "http") {
-			re := regexp.MustCompile(`https://[^\s]+`)
+			re := regexp.MustCompile(`https://[^\s"\}]+`)
 			if match := re.FindString(line); match != "" {
 				return match, nil
 			}
