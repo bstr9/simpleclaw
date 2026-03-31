@@ -286,6 +286,7 @@ func (e *executor) processToolCalls(ctx context.Context, toolCalls []llm.ToolCal
 
 				logger.Error("Tool execution failed",
 					zap.String("tool_name", tc.Function.Name),
+					zap.String("tool_id", tc.ID),
 					zap.Error(err))
 				return
 			}
