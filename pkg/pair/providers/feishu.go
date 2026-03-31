@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bstr9/simpleclaw/pkg/logger"
 	"github.com/bstr9/simpleclaw/pkg/pair"
+	"go.uber.org/zap"
 )
 
 const (
@@ -50,16 +52,28 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// 先初始化 lark-cli 配置，确保使用正确的 app_id
+	initCmd := exec.CommandContext(ctx, "lark-cli", "config", "init",
+		"--app-id", p.appID,
+		"--brand", "feishu",
+	)
+	initCmd.Env = os.Environ()
+	initCmd.Env = append(initCmd.Env, "LARK_APP_SECRET="+p.appSecret)
+
+	// 通过 stdin 传递 app_secret，避免命令行暴露
+	initCmd.Stdin = strings.NewReader(p.appSecret + "\n")
+
+	if _, err := initCmd.CombinedOutput(); err != nil {
+		logger.Warn("lark-cli config init failed, continuing with auth login", zap.Error(err))
+	}
+
 	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "login",
 		"--no-wait",
 		"--recommend",
 		"--json",
 	)
 
-	cmd.Env = append(os.Environ(),
-		"LARK_APP_ID="+p.appID,
-		"LARK_APP_SECRET="+p.appSecret,
-	)
+	cmd.Env = os.Environ()
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
