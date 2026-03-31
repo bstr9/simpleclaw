@@ -1,7 +1,7 @@
 {
     "channel_type": "terminal",
     "model": "openai",
-    "open_ai_api_key": "sk-VKMpXEzpfIoyWiIJv5GNOGXVcNVSqcgl",
+    "open_ai_api_key": "YOUR_OPENAI_API_KEY_HERE",
     "open_ai_api_base": "https://chat.uii-ai.com/v1",
     "model_name": "glm-5",
     "agent": true,

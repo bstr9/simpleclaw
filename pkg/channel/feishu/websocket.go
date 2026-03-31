@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -173,6 +174,29 @@ func (w *WSClient) processMessageAsync(feishuMsg *FeishuMessage) {
 	feishuMsg.SetExtraContext("channel_type", "feishu")
 
 	logger.Info("[Feishu WS] 调用消息处理器", zap.String("msg_id", msgID))
+
+	sessionID := feishuMsg.GetSessionID(w.channel.config.GroupSharedSession)
+	userID := feishuMsg.SenderOpenID
+
+	if w.channel.pairManager != nil {
+		pairResult, err := w.channel.pairManager.CheckSessionPair(sessionID, userID, "feishu")
+		if err != nil {
+			logger.Warn("[Feishu WS] Pair check failed", zap.Error(err))
+		} else if !pairResult.Paired {
+			pairStart, err := w.channel.pairManager.StartPair(sessionID, userID, "feishu")
+			if err != nil {
+				logger.Error("[Feishu WS] Failed to start pair", zap.Error(err))
+			} else {
+				replyMsg := fmt.Sprintf("请先授权以使用完整功能：\n%s", pairStart.AuthURL)
+				reply := &types.Reply{Type: types.ReplyText, Content: replyMsg}
+				if sendErr := w.channel.Send(reply, msgCtx); sendErr != nil {
+					logger.Error("[Feishu WS] 发送配对链接失败", zap.Error(sendErr))
+				}
+			}
+			w.channel.RemoveTypingReaction(msgID, reactionID)
+			return
+		}
+	}
 
 	var reply *types.Reply
 	var procErr error

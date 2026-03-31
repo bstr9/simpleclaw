@@ -340,6 +340,11 @@ func (t *LarkCLITool) Description() string {
 - 读取文档: {"command": "docs +fetch --doc \"TOKEN\""}
 - 搜索文档: {"command": "docs +search --keyword \"关键词\""}
 
+身份说明:
+- 默认使用 bot 身份（应用权限）
+- 访问用户私有资源时使用 user 身份: {"command": "calendar events list", "as": "user"}
+- 注意: 使用 user 身份需要用户先授权 (lark-cli auth login)
+
 其他常用示例:
 - 安装: {"action": "install"}
 - 更新: {"action": "update"}
@@ -664,6 +669,19 @@ func (t *LarkCLITool) runCommand(args []string, timeout time.Duration) (string, 
 			"LARK_APP_ID="+t.appID,
 			"LARK_APP_SECRET="+t.appSecret,
 		)
+	}
+
+	forceUser := false
+	for _, arg := range args {
+		if arg == "--as" || arg == "user" {
+			if arg == "user" {
+				forceUser = true
+			}
+		}
+	}
+
+	if forceUser {
+		cmd.Args = append([]string{"lark-cli", "--as", "user"}, args[1:]...)
 	}
 
 	var stdout, stderr bytes.Buffer

@@ -4,6 +4,8 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
@@ -111,12 +113,79 @@ func (e *FeishuExtension) Startup(ctx context.Context) error {
 		logger.Warn("[FeishuExtension] lark-cli skills 未安装，请使用 lark_cli 工具的 install 操作进行安装")
 	} else {
 		logger.Info("[FeishuExtension] lark-cli 和 skills 已就绪")
+
+		// 检查 lark-cli 配置是否与 simpleclaw 一致
+		cfg := config.Get()
+		if err := e.checkLarkCLIConfig(cfg); err != nil {
+			logger.Warn("[FeishuExtension] lark-cli 配置检查失败", zap.Error(err))
+		}
+
 		e.stopUpdate = make(chan struct{})
 		go e.backgroundUpdateCheck()
 	}
 
 	e.started = true
 
+	return nil
+}
+
+// checkLarkCLIConfig 检查 lark-cli 配置是否与 simpleclaw 一致
+func (e *FeishuExtension) checkLarkCLIConfig(cfg *config.Config) error {
+	if cfg.FeishuAppID == "" {
+		return nil
+	}
+
+	larkTool := tools.NewLarkCLITool(
+		tools.WithAppCredentials(cfg.FeishuAppID, cfg.FeishuAppSecret),
+	)
+
+	result, err := larkTool.Execute(map[string]any{
+		"command": "config show",
+		"format":  "json",
+	})
+	if err != nil {
+		logger.Warn("[FeishuExtension] 无法获取 lark-cli 配置，将尝试初始化", zap.Error(err))
+		return e.initLarkCLIConfig(cfg)
+	}
+
+	var configData struct {
+		AppID string `json:"appId"`
+	}
+	resultStr, ok := result.Result.(string)
+	if !ok {
+		return fmt.Errorf("lark-cli config show 返回非字符串结果")
+	}
+	if err := json.Unmarshal([]byte(resultStr), &configData); err != nil {
+		return fmt.Errorf("解析 lark-cli 配置失败: %w", err)
+	}
+
+	if configData.AppID != cfg.FeishuAppID {
+		logger.Info("[FeishuExtension] lark-cli 配置与 simpleclaw 不一致，重新初始化",
+			zap.String("lark_cli_app_id", configData.AppID),
+			zap.String("simpleclaw_app_id", cfg.FeishuAppID))
+		return e.initLarkCLIConfig(cfg)
+	}
+
+	logger.Info("[FeishuExtension] lark-cli 配置检查通过", zap.String("app_id", cfg.FeishuAppID))
+	return nil
+}
+
+// initLarkCLIConfig 初始化 lark-cli 配置
+func (e *FeishuExtension) initLarkCLIConfig(cfg *config.Config) error {
+	if cfg.FeishuAppID == "" || cfg.FeishuAppSecret == "" {
+		return fmt.Errorf("feishu_app_id 或 feishu_app_secret 未配置")
+	}
+
+	larkTool := tools.NewLarkCLITool()
+
+	_, err := larkTool.Execute(map[string]any{
+		"command": fmt.Sprintf("config init --app-id %s --brand feishu", cfg.FeishuAppID),
+	})
+	if err != nil {
+		return fmt.Errorf("初始化 lark-cli 配置失败: %w", err)
+	}
+
+	logger.Info("[FeishuExtension] lark-cli 配置初始化成功", zap.String("app_id", cfg.FeishuAppID))
 	return nil
 }
 

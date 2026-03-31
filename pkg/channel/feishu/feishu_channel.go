@@ -104,6 +104,29 @@ type FeishuChannel struct {
 
 	// 消息处理器回调
 	messageHandler FeishuMessageProcessor
+
+	// Pair 管理器 (可选)
+	pairManager PairManager
+}
+
+// PairManager 配对管理器接口
+type PairManager interface {
+	CheckSessionPair(sessionID, userID, channelType string) (*PairCheckResult, error)
+	StartPair(sessionID, userID, channelType string) (*PairResult, error)
+}
+
+// PairCheckResult 配对检查结果
+type PairCheckResult struct {
+	Paired  bool
+	Status  string
+	AuthURL string
+}
+
+// PairResult 配对结果
+type PairResult struct {
+	Success bool
+	AuthURL string
+	Message string
 }
 
 // FeishuMessageProcessor 飞书消息处理器接口
@@ -165,6 +188,11 @@ func (f *FeishuChannel) SetMessageHandler(handler any) {
 // SetMessageHandlerFunc 以函数形式设置消息处理器
 func (f *FeishuChannel) SetMessageHandlerFunc(handler func(ctx context.Context, msg *FeishuMessage) (*types.Reply, error)) {
 	f.messageHandler = MessageHandlerFunc(handler)
+}
+
+// SetPairManager 设置配对管理器
+func (f *FeishuChannel) SetPairManager(pm PairManager) {
+	f.pairManager = pm
 }
 
 // Startup 启动飞书渠道
