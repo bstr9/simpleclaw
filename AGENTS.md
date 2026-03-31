@@ -138,11 +138,12 @@ read, write, edit, ls, bash, web_search, web_fetch, browser, memory, scheduler, 
 
 ---
 
-## PENDING INTEGRATION
+## INTEGRATION STATUS
 
-- [ ] Memory 系统集成
-- [ ] Voice TTS/STT
-- [ ] Skills 系统
-- [ ] Web/Weixin 渠道
-- [ ] BashTool
-- [ ] Plugins (godcmd, hello, keyword等)
+所有核心功能已实现：
+- ✅ Memory 系统 (短期/长期记忆，向量存储)
+- ✅ Voice TTS/STT (9个语音平台)
+- ✅ Skills 系统 (技能注册与加载)
+- ✅ Web/Weixin 渠道 (9个渠道)
+- ✅ BashTool (Shell 命令执行)
+- ✅ Plugins (9个插件)
