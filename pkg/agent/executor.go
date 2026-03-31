@@ -304,9 +304,16 @@ func (e *executor) processToolCalls(ctx context.Context, toolCalls []llm.ToolCal
 				"result":  result.Result,
 			})
 
-			logger.Info("Tool execution completed",
-				zap.String("tool_name", tc.Function.Name),
-				zap.String("status", result.Status))
+			if result.Status == "error" {
+				logger.Error("Tool execution returned error",
+					zap.String("tool_name", tc.Function.Name),
+					zap.String("tool_id", tc.ID),
+					zap.String("result", string(resultJSON)))
+			} else {
+				logger.Info("Tool execution completed",
+					zap.String("tool_name", tc.Function.Name),
+					zap.String("status", result.Status))
+			}
 		}(i, toolCall)
 	}
 
