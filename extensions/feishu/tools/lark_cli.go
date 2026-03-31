@@ -351,11 +351,11 @@ func (t *LarkCLITool) Description() string {
 - status: 查看安装状态
 
 支持的业务域:
-- calendar: 日历日程管理
-- im: 即时通讯，消息收发
-- docs: 云文档操作
+- docs: 云文档操作（创建、读取、更新、搜索）
 - sheets: 电子表格
 - base: 多维表格
+- calendar: 日历日程管理
+- im: 即时通讯，消息收发
 - drive: 云空间文件管理
 - task: 任务管理
 - contact: 通讯录
@@ -364,18 +364,15 @@ func (t *LarkCLITool) Description() string {
 - vc: 视频会议
 - event: 事件订阅
 
-命令格式:
-- Shortcuts: lark-cli <domain> +<action> [flags]
-- API: lark-cli <domain> <resource> <method> --params '{}' --data '{}'
+飞书文档操作示例:
+- 创建文档: {"command": "docs +create --title \"文档标题\" --markdown \"# 内容\n正文\""}
+- 追加内容: {"command": "docs +update --doc \"TOKEN\" --mode append --markdown \"新内容\""}
+- 读取文档: {"command": "docs +fetch --doc \"TOKEN\""}
+- 搜索文档: {"command": "docs +search --keyword \"关键词\""}
 
-身份切换:
-- --as user: 用户身份（需先 auth login）
-- --as bot: 应用身份（默认）
-
-示例:
+其他常用示例:
 - 安装: {"action": "install"}
 - 更新: {"action": "update"}
-- 检查更新: {"action": "check-update"}
 - 查看今日日程: {"command": "calendar +agenda"}
 - 发送消息: {"command": "im +messages-send --chat-id oc_xxx --text 'Hello'"}`
 }

@@ -25,6 +25,7 @@ var coreToolSummaries = map[string]string{
 	"env_config":    "管理API密钥和技能配置",
 	"cron":          "创建和管理定时任务、提醒",
 	"send":          "发送本地文件给用户（仅限本地文件，URL直接放在回复文本中）",
+	"lark_cli":      "飞书操作（创建文档/表格、发消息等）。当用户要求创建飞书文档或操作飞书时必须使用此工具",
 }
 
 // 工具显示顺序
@@ -33,7 +34,7 @@ var toolOrder = []string{
 	"bash", "terminal",
 	"web_search", "web_fetch", "browser",
 	"memory_search", "memory_get",
-	"env_config", "cron", "send",
+	"env_config", "cron", "send", "lark_cli",
 }
 
 // BuildSystemPrompt 构建完整的 Agent 系统提示词
@@ -108,6 +109,7 @@ func buildToolingSection(tools []*ToolInfo, language string) []string {
 		"- 持续推进直到任务完成，完成后向用户报告结果。",
 		"- 回复中涉及密钥、令牌等敏感信息必须脱敏。",
 		"- URL链接直接放在回复文本中即可，系统会自动处理和渲染。无需下载后使用send工具发送",
+		"- 创建飞书文档/表格、发送飞书消息等操作必须使用 lark_cli 工具，不要直接输出文档内容",
 		"",
 	}
 
