@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -55,12 +56,10 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 		"--json",
 	)
 
-	if p.appID != "" && p.appSecret != "" {
-		cmd.Env = append(cmd.Env,
-			"LARK_APP_ID="+p.appID,
-			"LARK_APP_SECRET="+p.appSecret,
-		)
-	}
+	cmd.Env = append(os.Environ(),
+		"LARK_APP_ID="+p.appID,
+		"LARK_APP_SECRET="+p.appSecret,
+	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -102,12 +101,10 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 
 	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "status", "--json")
 
-	if p.appID != "" && p.appSecret != "" {
-		cmd.Env = append(cmd.Env,
-			"LARK_APP_ID="+p.appID,
-			"LARK_APP_SECRET="+p.appSecret,
-		)
-	}
+	cmd.Env = append(os.Environ(),
+		"LARK_APP_ID="+p.appID,
+		"LARK_APP_SECRET="+p.appSecret,
+	)
 
 	output, err := cmd.Output()
 	if err != nil {
