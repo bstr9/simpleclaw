@@ -132,9 +132,19 @@ terminal, web, feishu, dingtalk, weixin, wechatmp, wechatcom, wecombot, qq
 
 ---
 
-## TOOLS (14)
+## TOOLS (15)
 
-read, write, edit, ls, bash, web_search, web_fetch, browser, memory, scheduler, vision, time, env_config, send
+read, write, edit, ls, bash, web_search, web_fetch, browser, memory, scheduler, vision, time, env_config, send, lark_cli
+
+---
+
+## FEISHU INTEGRATION
+
+飞书扩展集成官方 lark-cli，提供：
+- **lark_cli 工具**: 封装 200+ 命令
+- **19 个官方 Skills**: 自动注册 `~/.agents/skills/`
+
+详见 `extensions/AGENTS.md`
 
 ---
 

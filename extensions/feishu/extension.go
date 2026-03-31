@@ -1,11 +1,12 @@
 // Package feishu 飞书扩展。
-// 提供飞书通道、文档工具、知识库工具等。
+// 提供飞书通道、lark-cli 工具封装、技能路径注册等。
 package feishu
 
 import (
 	"context"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/bstr9/simpleclaw/extensions/feishu/tools"
 	"github.com/bstr9/simpleclaw/pkg/channel"
@@ -25,12 +26,12 @@ func init() {
 
 // FeishuExtension 飞书扩展。
 type FeishuExtension struct {
-	mu sync.RWMutex
-
+	mu           sync.RWMutex
 	channel      *feishu.FeishuChannel
 	api          extension.ExtensionAPI
 	started      bool
 	extensionDir string
+	stopUpdate   chan struct{}
 }
 
 // New 创建飞书扩展。
@@ -70,11 +71,16 @@ func (e *FeishuExtension) Register(api extension.ExtensionAPI) error {
 		return e.createChannel()
 	})
 
-	// 注册技能目录
+	// 注册扩展内技能目录
 	skillsDir := filepath.Join(api.ExtensionDir(), "skills")
 	api.RegisterSkillPath(skillsDir)
 
-	// 注册飞书文档工具
+	// 注册 lark-cli 工具（封装 lark-cli 命令）
+	larkCLITool := tools.NewLarkCLITool()
+	api.RegisterTool(larkCLITool)
+	logger.Info("[FeishuExtension] lark_cli tool registered")
+
+	// 注册飞书文档工具（旧版 API，保持兼容）
 	cfg := config.Get()
 	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
 		docTool := tools.NewFeishuDocTool(cfg.FeishuAppID, cfg.FeishuAppSecret)
@@ -96,6 +102,23 @@ func (e *FeishuExtension) Startup(ctx context.Context) error {
 	}
 
 	logger.Info("[FeishuExtension] Starting extension")
+
+	// 检测环境状态
+	larkTool := tools.NewLarkCLITool()
+	status := larkTool.Status()
+
+	if !status["npm_installed"] {
+		logger.Warn("[FeishuExtension] npm 未安装，请先安装 Node.js (https://nodejs.org/)")
+	} else if !status["lark_cli_installed"] {
+		logger.Warn("[FeishuExtension] lark-cli 未安装，请使用 lark_cli 工具的 install 操作进行安装")
+	} else if !status["lark_skills_installed"] {
+		logger.Warn("[FeishuExtension] lark-cli skills 未安装，请使用 lark_cli 工具的 install 操作进行安装")
+	} else {
+		logger.Info("[FeishuExtension] lark-cli 和 skills 已就绪")
+		e.stopUpdate = make(chan struct{})
+		go e.backgroundUpdateCheck()
+	}
+
 	e.started = true
 
 	return nil
@@ -112,6 +135,12 @@ func (e *FeishuExtension) Shutdown(ctx context.Context) error {
 
 	logger.Info("[FeishuExtension] Shutting down extension")
 
+	// 停止后台更新检查
+	if e.stopUpdate != nil {
+		close(e.stopUpdate)
+		e.stopUpdate = nil
+	}
+
 	if e.channel != nil {
 		if err := e.channel.Stop(); err != nil {
 			logger.Warn("[FeishuExtension] Failed to stop channel", zap.Error(err))
@@ -120,6 +149,47 @@ func (e *FeishuExtension) Shutdown(ctx context.Context) error {
 
 	e.started = false
 	return nil
+}
+
+// backgroundUpdateCheck 后台定期检查更新（每天检查一次）。
+func (e *FeishuExtension) backgroundUpdateCheck() {
+	// 启动后 5 分钟进行首次检查
+	select {
+	case <-time.After(5 * time.Minute):
+	case <-e.stopUpdate:
+		return
+	}
+
+	e.checkAndNotifyUpdate()
+
+	// 之后每 24 小时检查一次
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			e.checkAndNotifyUpdate()
+		case <-e.stopUpdate:
+			return
+		}
+	}
+}
+
+// checkAndNotifyUpdate 检查更新并通知。
+func (e *FeishuExtension) checkAndNotifyUpdate() {
+	info, err := tools.CheckUpdate()
+	if err != nil {
+		logger.Debug("[FeishuExtension] 检查更新失败", zap.Error(err))
+		return
+	}
+
+	if info["update_available"] == "true" {
+		logger.Info("[FeishuExtension] 发现新版本",
+			zap.String("current", info["lark_cli_current"]),
+			zap.String("latest", info["lark_cli_latest"]),
+			zap.String("hint", "请使用 lark_cli 工具的 update 操作进行更新"))
+	}
 }
 
 // createChannel 创建飞书通道。

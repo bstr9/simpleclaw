@@ -129,6 +129,14 @@ func NewAgentBridge(bridge *Bridge) *AgentBridge {
 	skillDirs := []string{skillsDir, builtinSkillsDir, customSkillsDir}
 	skillDirs = append(skillDirs, registry.GetSkillPaths()...)
 
+	// 添加全局 skills 目录 (~/.agents/skills/)，支持 npx skills 安装的技能
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		globalSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+		if _, err := os.Stat(globalSkillsDir); err == nil {
+			skillDirs = append(skillDirs, globalSkillsDir)
+		}
+	}
+
 	if err := ab.skillsRegistry.LoadFromDir(skillDirs...); err != nil {
 		logger.Debug("加载技能失败", zap.Error(err))
 	}

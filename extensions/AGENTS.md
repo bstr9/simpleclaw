@@ -5,10 +5,13 @@
 ```
 extensions/
 ├── AGENTS.md          # 本文档
-├── feishu/            # 飞书扩展（参考模板）
+├── feishu/            # 飞书扩展（完整模板）
 │   ├── extension.go   # Extension 接口实现
-│   └── tools/         # 扩展工具
-│       └── doc.go
+│   ├── tools/         # 扩展工具
+│   │   ├── doc.go     # 飞书文档工具（旧版API）
+│   │   └── lark_cli.go # lark-cli 封装工具
+│   └── skills/        # 扩展技能
+│       └── feishu_doc/
 ├── weixin/            # 微信扩展
 ├── dingtalk/          # 钉钉扩展
 ├── qq/                # QQ扩展
@@ -17,6 +20,59 @@ extensions/
 ├── wecombot/          # 企业微信机器人扩展
 ├── web/               # Web扩展
 └── terminal/          # 终端扩展
+```
+
+## 飞书扩展 (Lark/Feishu)
+
+飞书扩展集成了官方 [lark-cli](https://github.com/larksuite/cli) 工具，提供完整的飞书开放平台能力。
+
+### 工具
+
+| 工具 | 说明 |
+|------|------|
+| `lark_cli` | 封装 lark-cli 命令，支持 11 个业务域 200+ 命令 |
+| `feishu_doc` | 飞书文档操作（旧版API，保持兼容） |
+
+### 技能
+
+自动注册全局 lark-cli skills 路径 (`~/.agents/skills/`)，包含 19 个官方技能：
+
+| 技能 | 说明 |
+|------|------|
+| `lark-shared` | 认证、权限、安全规则（基础） |
+| `lark-im` | 即时通讯、消息收发 |
+| `lark-calendar` | 日历日程 |
+| `lark-doc` | 云文档 |
+| `lark-sheets` | 电子表格 |
+| `lark-base` | 多维表格 |
+| `lark-drive` | 云空间 |
+| `lark-task` | 任务管理 |
+| `lark-contact` | 通讯录 |
+| `lark-mail` | 邮箱 |
+| `lark-wiki` | 知识库 |
+| `lark-vc` | 视频会议 |
+| `lark-event` | 事件订阅 |
+| `lark-minutes` | 妙记 |
+| `lark-whiteboard` | 画板 |
+| `lark-openapi-explorer` | OpenAPI 探索 |
+| `lark-skill-maker` | 自定义技能 |
+| `lark-workflow-meeting-summary` | 会议纪要工作流 |
+| `lark-workflow-standup-report` | 日程待办摘要 |
+
+### 安装 lark-cli
+
+```bash
+# 安装 CLI
+npm install -g @larksuite/cli
+
+# 安装 Skills
+npx skills add larksuite/cli -g -y
+
+# 配置应用
+lark-cli config init
+
+# 登录授权
+lark-cli auth login --recommend
 ```
 
 ## Extension 接口
