@@ -85,9 +85,12 @@ func (c *StreamingCardController) Complete() {
 	c.mu.Lock()
 	c.phase = PhaseCompleted
 	c.cancelPendingTimerLocked()
+	hasContent := c.cardMsgID != "" && c.accumulated != ""
 	c.mu.Unlock()
 
-	c.flush()
+	if hasContent {
+		c.flush()
+	}
 }
 
 // HasContent 检查是否有累积的内容
