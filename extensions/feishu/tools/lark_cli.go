@@ -22,6 +22,8 @@ type LarkCLITool struct {
 	timeout    time.Duration
 	workingDir string
 	installed  bool
+	appID      string
+	appSecret  string
 }
 
 // NewLarkCLITool 创建 lark-cli 工具实例。
@@ -35,6 +37,14 @@ func NewLarkCLITool(opts ...LarkCLIToolOption) *LarkCLITool {
 		opt(t)
 	}
 	return t
+}
+
+// WithAppCredentials 设置应用凭证（与 channel 共享配置）。
+func WithAppCredentials(appID, appSecret string) LarkCLIToolOption {
+	return func(t *LarkCLITool) {
+		t.appID = appID
+		t.appSecret = appSecret
+	}
 }
 
 // checkLarkCLIInstalled 检测 lark-cli 是否已安装。
@@ -687,6 +697,13 @@ func (t *LarkCLITool) runCommand(args []string, timeout time.Duration) (string, 
 
 	if t.workingDir != "" {
 		cmd.Dir = t.workingDir
+	}
+
+	if t.appID != "" && t.appSecret != "" {
+		cmd.Env = append(os.Environ(),
+			"LARK_APP_ID="+t.appID,
+			"LARK_APP_SECRET="+t.appSecret,
+		)
 	}
 
 	var stdout, stderr bytes.Buffer

@@ -75,10 +75,14 @@ func (e *FeishuExtension) Register(api extension.ExtensionAPI) error {
 	skillsDir := filepath.Join(api.ExtensionDir(), "skills")
 	api.RegisterSkillPath(skillsDir)
 
-	// 注册 lark-cli 工具（封装 lark-cli 命令）
-	larkCLITool := tools.NewLarkCLITool()
+	// 注册 lark-cli 工具（封装 lark-cli 命令，与 channel 共享配置）
+	cfg := config.Get()
+	larkCLITool := tools.NewLarkCLITool(
+		tools.WithAppCredentials(cfg.FeishuAppID, cfg.FeishuAppSecret),
+	)
 	api.RegisterTool(larkCLITool)
-	logger.Info("[FeishuExtension] lark_cli tool registered")
+	logger.Info("[FeishuExtension] lark_cli tool registered",
+		zap.String("app_id", cfg.FeishuAppID))
 
 	logger.Info("[FeishuExtension] Extension registered")
 	return nil
