@@ -212,4 +212,10 @@ func setDefaults(v *viper.Viper) {
 
 	// 清除记忆命令
 	v.SetDefault("clear_memory_commands", []string{"#清除记忆"})
+
+	// Admin 配置
+	v.SetDefault("admin.enabled", true)
+	v.SetDefault("admin.host", "0.0.0.0")
+	v.SetDefault("admin.port", 8081)
+	v.SetDefault("admin.username", "admin")
 }

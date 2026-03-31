@@ -172,6 +172,19 @@ type Config struct {
 	MemoryType         string `mapstructure:"memory_type"`
 	MemoryMaxTokens    int    `mapstructure:"memory_max_tokens"`
 	MemorySummaryModel string `mapstructure:"memory_summary_model"`
+
+	// Admin 管理后台配置
+	Admin *AdminConfig `mapstructure:"admin"`
+}
+
+type AdminConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	Host          string `mapstructure:"host"`
+	Port          int    `mapstructure:"port"`
+	Username      string `mapstructure:"username"`
+	PasswordHash  string `mapstructure:"password_hash"`
+	SessionSecret string `mapstructure:"session_secret"`
+	StaticDir     string `mapstructure:"static_dir"`
 }
 
 // 全局配置实例
@@ -486,4 +499,20 @@ func maskKey(key string) string {
 		return "***"
 	}
 	return key[:3] + "*****" + key[len(key)-3:]
+}
+
+func (c *Config) GetAdminConfig() *AdminConfig {
+	if c.Admin == nil {
+		return &AdminConfig{
+			Enabled: true,
+			Host:    "0.0.0.0",
+			Port:    8081,
+		}
+	}
+	return c.Admin
+}
+
+func (c *Config) IsAdminEnabled() bool {
+	cfg := c.GetAdminConfig()
+	return cfg.Enabled
 }
