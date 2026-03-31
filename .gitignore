@@ -1,0 +1,39 @@
+# 编译产物
+simpleclaw
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试
+*.test
+coverage.out
+coverage.html
+
+# 配置文件 (可能包含敏感信息)
+config.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+vendor/
+
+# 工作空间数据
+data/workspace/
+
+# 日志
+logs/
+*.log
+
+# SonarQube
+.scannerwork/
+
+# 临时文件
+tmp/
+temp/

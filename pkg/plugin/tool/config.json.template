@@ -1,0 +1,40 @@
+{
+  "tools": [
+    "url-get",
+    "meteo",
+    "calculator",
+    "search"
+  ],
+  "tool_configs": {
+    "url-get": {
+      "enabled": true,
+      "config": {}
+    },
+    "meteo": {
+      "enabled": true,
+      "config": {}
+    },
+    "calculator": {
+      "enabled": true,
+      "config": {}
+    },
+    "search": {
+      "enabled": true,
+      "config": {}
+    }
+  },
+  "kwargs": {},
+  "trigger_prefix": "$",
+  "debug": false,
+  "no_default": false,
+  "think_depth": 2,
+  "request_timeout": 120,
+  "model_name": "gpt-3.5-turbo",
+  "temperature": 0,
+  "llm_api_key": "",
+  "llm_api_base": "",
+  "bing_subscription_key": "",
+  "bing_search_url": "https://api.bing.microsoft.com/v7.0/search",
+  "google_api_key": "",
+  "google_cse_id": ""
+}
