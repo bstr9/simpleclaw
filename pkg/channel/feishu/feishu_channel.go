@@ -4,7 +4,6 @@ package feishu
 
 import (
 	"bytes"
-	"github.com/bstr9/simpleclaw/pkg/common"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -12,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/bstr9/simpleclaw/pkg/common"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -47,6 +47,7 @@ const (
 
 	// 消息类型
 	msgTypeText = "text"
+	msgTypePost = "post"
 
 	// ID 类型
 	idTypeOpenID = "open_id"
@@ -406,7 +407,8 @@ func (f *FeishuChannel) prepareMessageContent(reply *types.Reply, accessToken st
 	switch reply.Type {
 	case types.ReplyText:
 		content := reply.StringContent()
-		return msgTypeText, fmt.Sprintf(`{"text":%q}`, content), nil
+		// 使用 post 类型支持 Markdown 渲染
+		return msgTypePost, buildPostContent(content), nil
 
 	case types.ReplyImage, types.ReplyImageURL:
 		imageKey, err := f.uploadImage(reply.StringContent(), accessToken)
@@ -430,8 +432,15 @@ func (f *FeishuChannel) prepareMessageContent(reply *types.Reply, accessToken st
 		contentJSON, _ := json.Marshal(uploadData)
 		return "media", string(contentJSON), nil
 
+	case types.ReplyCard:
+		cardJSON, err := json.Marshal(reply.Content)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to marshal card content: %w", err)
+		}
+		return "interactive", string(cardJSON), nil
+
 	default:
-		return msgTypeText, fmt.Sprintf(`{"text":%q}`, reply.StringContent()), nil
+		return msgTypePost, buildPostContent(reply.StringContent()), nil
 	}
 }
 
@@ -518,8 +527,8 @@ func (f *FeishuChannel) SendStreamMessage(feishuMsg *FeishuMessage, content stri
 
 	data := map[string]string{
 		"receive_id": receiver,
-		"msg_type":   msgTypeText,
-		"content":    fmt.Sprintf(`{"text":%q}`, content),
+		"msg_type":   msgTypePost,
+		"content":    buildPostContent(content),
 	}
 
 	body, err := json.Marshal(data)
@@ -570,8 +579,8 @@ func (f *FeishuChannel) UpdateStreamMessage(msgID, content string) error {
 	url := fmt.Sprintf("%s/im/v1/messages/%s", feishuAPIBase, msgID)
 
 	data := map[string]string{
-		"msg_type": msgTypeText,
-		"content":  fmt.Sprintf(`{"text":%q}`, content),
+		"msg_type": msgTypePost,
+		"content":  buildPostContent(content),
 	}
 
 	body, err := json.Marshal(data)
@@ -1107,4 +1116,17 @@ func getFileType(fileName string) string {
 		return t
 	}
 	return "stream"
+}
+
+// buildPostContent 构建飞书 post 类型消息内容，支持 Markdown 渲染
+func buildPostContent(text string) string {
+	content := map[string]any{
+		"zh_cn": map[string]any{
+			"content": [][]map[string]string{
+				{{"tag": "text", "text": text}},
+			},
+		},
+	}
+	data, _ := json.Marshal(content)
+	return string(data)
 }
