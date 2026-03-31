@@ -56,18 +56,6 @@ func NewStreamingCardController(channel *FeishuChannel, msg *FeishuMessage, ctx 
 	}
 }
 
-// AppendText 追加文本并触发节流更新
-func (c *StreamingCardController) AppendText(text string) {
-	c.mu.Lock()
-	c.accumulated += text
-	shouldFlush := c.shouldFlushLocked()
-	c.mu.Unlock()
-
-	if shouldFlush {
-		go c.flush()
-	}
-}
-
 // UpdateText 更新完整文本并触发节流更新
 func (c *StreamingCardController) UpdateText(text string) {
 	c.mu.Lock()

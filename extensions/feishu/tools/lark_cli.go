@@ -84,7 +84,7 @@ func InstallNodeJS() error {
 		if _, err := exec.LookPath("brew"); err == nil {
 			cmd = exec.CommandContext(ctx, "brew", "install", "node")
 		} else {
-			return fmt.Errorf("Homebrew 未安装，请先安装 Homebrew: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"")
+			return fmt.Errorf("homebrew 未安装，请先安装 Homebrew: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"")
 		}
 	case "linux":
 		// Linux: 检测包管理器
@@ -190,32 +190,6 @@ func UpdateLarkCLISkills() error {
 		return fmt.Errorf("更新 lark-cli skills 失败: %w\n%s", err, string(output))
 	}
 
-	return nil
-}
-
-// InstallAll 安装 lark-cli 和 skills。
-func InstallAll() error {
-	if !checkLarkCLIInstalled() {
-		if err := InstallLarkCLI(); err != nil {
-			return err
-		}
-	}
-	if !checkSkillsInstalled() {
-		if err := InstallLarkCLISkills(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// UpdateAll 更新 lark-cli 和 skills 到最新版本。
-func UpdateAll() error {
-	if err := UpdateLarkCLI(); err != nil {
-		return err
-	}
-	if err := UpdateLarkCLISkills(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -330,20 +304,6 @@ func (t *LarkCLITool) StatusDetail() map[string]string {
 
 // LarkCLIToolOption lark-cli 工具配置选项。
 type LarkCLIToolOption func(*LarkCLITool)
-
-// WithLarkCLITimeout 设置命令超时时间。
-func WithLarkCLITimeout(timeout time.Duration) LarkCLIToolOption {
-	return func(t *LarkCLITool) {
-		t.timeout = timeout
-	}
-}
-
-// WithLarkCLIWorkingDir 设置工作目录。
-func WithLarkCLIWorkingDir(dir string) LarkCLIToolOption {
-	return func(t *LarkCLITool) {
-		t.workingDir = dir
-	}
-}
 
 // Name 返回工具名称。
 func (t *LarkCLITool) Name() string {

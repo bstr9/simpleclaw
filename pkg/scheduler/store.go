@@ -124,11 +124,3 @@ func (s *Store) persist() error {
 
 	return os.WriteFile(s.filePath, data, 0644)
 }
-
-// Reload 重新从文件加载任务（支持外部修改后热重载）
-func (s *Store) Reload() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.load()
-}

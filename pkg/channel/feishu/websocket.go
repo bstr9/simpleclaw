@@ -264,62 +264,6 @@ func (h *streamCardHandler) ProcessMessage(ctx context.Context, msg *FeishuMessa
 	return reply, err
 }
 
-// processWithStreamPost 使用 post 消息的流式处理（备用）
-func (w *WSClient) processWithStreamPost(feishuMsg *FeishuMessage, msgCtx *types.Context) (*types.Reply, error) {
-	var lastContent string
-	var sentMsgID string
-
-	onEvent := func(event map[string]any) {
-		eventType, _ := event["type"].(string)
-		if eventType != "text" {
-			return
-		}
-
-		text, _ := event["text"].(string)
-		if text == "" || text == lastContent {
-			return
-		}
-
-		lastContent = text
-
-		if sentMsgID == "" {
-			newMsgID, err := w.channel.SendStreamMessage(feishuMsg, text, msgCtx)
-			if err != nil {
-				logger.Warn("[Feishu WS] 发送流式消息失败", zap.Error(err))
-				return
-			}
-			sentMsgID = newMsgID
-		} else {
-			if err := w.channel.UpdateStreamMessage(sentMsgID, text); err != nil {
-				logger.Warn("[Feishu WS] 更新流式消息失败", zap.Error(err))
-			}
-		}
-	}
-
-	streamHandler := &streamMessageHandler{
-		inner:     w.channel.messageHandler,
-		onEvent:   onEvent,
-		feishuMsg: feishuMsg,
-	}
-
-	return streamHandler.ProcessMessage(context.Background(), feishuMsg)
-}
-
-type streamMessageHandler struct {
-	inner     FeishuMessageProcessor
-	onEvent   func(event map[string]any)
-	feishuMsg *FeishuMessage
-}
-
-func (h *streamMessageHandler) ProcessMessage(ctx context.Context, msg *FeishuMessage) (*types.Reply, error) {
-	if processor, ok := h.inner.(interface {
-		ProcessMessageWithStream(ctx context.Context, msg *FeishuMessage, onEvent func(event map[string]any)) (*types.Reply, error)
-	}); ok {
-		return processor.ProcessMessageWithStream(ctx, msg, h.onEvent)
-	}
-	return h.inner.ProcessMessage(ctx, msg)
-}
-
 func (w *WSClient) parseMessageContent(msg *FeishuMessage, content string) {
 	if content == "" {
 		return

@@ -31,20 +31,6 @@ type WebFetchTool struct {
 // WebFetchOption 网页获取工具配置选项
 type WebFetchOption func(*WebFetchTool)
 
-// WithFetchTimeout 设置超时时间
-func WithFetchTimeout(timeout time.Duration) WebFetchOption {
-	return func(t *WebFetchTool) {
-		t.timeout = timeout
-	}
-}
-
-// WithFetchMaxChars 设置最大字符数
-func WithFetchMaxChars(maxChars int) WebFetchOption {
-	return func(t *WebFetchTool) {
-		t.maxChars = maxChars
-	}
-}
-
 // NewWebFetchTool 创建网页获取工具实例
 func NewWebFetchTool(workingDir string, opts ...WebFetchOption) *WebFetchTool {
 	t := &WebFetchTool{

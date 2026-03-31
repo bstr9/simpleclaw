@@ -33,14 +33,16 @@ const (
 	messageCacheExpireTime = 7 * time.Hour
 	maxStaleMessageAge     = 60 * time.Second
 
-	errCreateRequest  = "failed to create request: %w"
-	errParseResponse  = "failed to parse response: %w"
-	errUploadRequest  = "failed to upload request: %w"
-	errUploadFailed   = "upload failed: code=%d, msg=%s"
-	errGetAccessToken = "failed to get access token: %w"
-	errMarshalRequest = "failed to marshal request: %w"
-	errRequestFailed  = "request failed: %w"
-	prefixFile        = "file://"
+	errCreateRequest    = "failed to create request: %w"
+	errParseResponse    = "failed to parse response: %w"
+	errUploadRequest    = "failed to upload request: %w"
+	errUploadFailed     = "upload failed: code=%d, msg=%s"
+	errGetAccessToken   = "failed to get access token: %w"
+	errMarshalRequest   = "failed to marshal request: %w"
+	errRequestFailed    = "request failed: %w"
+	errFeishuAPI        = "feishu api error: code=%d"
+	errFeishuAPIWithMsg = "feishu api error: code=%d, msg=%s"
+	prefixFile          = "file://"
 
 	// 飞书 API 基础 URL
 	feishuAPIBase = "https://open.feishu.cn/open-apis"
@@ -56,6 +58,8 @@ const (
 	// 表单字段名
 	formFieldFileType = "file_type"
 	formFieldFileName = "file_name"
+
+	apiPathMessages = "/im/v1/messages?receive_id_type=%s"
 )
 
 // Config 定义飞书渠道配置
@@ -458,7 +462,7 @@ func (f *FeishuChannel) replyToMessage(msgID, msgType, content, accessToken stri
 
 // sendNewMessage 发送新消息
 func (f *FeishuChannel) sendNewMessage(receiveID, receiveIDType, msgType, content, accessToken string) error {
-	url := fmt.Sprintf("%s/im/v1/messages?receive_id_type=%s", feishuAPIBase, receiveIDType)
+	url := fmt.Sprintf(feishuAPIBase+apiPathMessages, receiveIDType)
 
 	data := map[string]string{
 		"receive_id": receiveID,
@@ -502,13 +506,14 @@ func (f *FeishuChannel) sendFeishuRequest(url string, data map[string]string, ac
 	}
 
 	if result.Code != 0 {
-		return fmt.Errorf("feishu api error: code=%d, msg=%s", result.Code, result.Msg)
+		return fmt.Errorf(errFeishuAPIWithMsg, result.Code, result.Msg)
 	}
 
 	logger.Debug("[Feishu] Message sent successfully")
 	return nil
 }
 
+// SendStreamMessage 发送流式消息
 func (f *FeishuChannel) SendStreamMessage(feishuMsg *FeishuMessage, content string, ctx *types.Context) (string, error) {
 	accessToken, err := f.getAccessToken()
 	if err != nil {
@@ -523,7 +528,7 @@ func (f *FeishuChannel) SendStreamMessage(feishuMsg *FeishuMessage, content stri
 		receiver = feishuMsg.ChatID
 	}
 
-	url := fmt.Sprintf("%s/im/v1/messages?receive_id_type=%s", feishuAPIBase, receiveIDType)
+	url := fmt.Sprintf(feishuAPIBase+apiPathMessages, receiveIDType)
 
 	data := map[string]string{
 		"receive_id": receiver,
@@ -564,7 +569,7 @@ func (f *FeishuChannel) SendStreamMessage(feishuMsg *FeishuMessage, content stri
 	}
 
 	if result.Code != 0 {
-		return "", fmt.Errorf("feishu api error: code=%d", result.Code)
+		return "", fmt.Errorf(errFeishuAPI, result.Code)
 	}
 
 	return result.Data.MessageID, nil
@@ -613,7 +618,7 @@ func (f *FeishuChannel) UpdateStreamMessage(msgID, content string) error {
 	}
 
 	if result.Code != 0 {
-		return fmt.Errorf("feishu api error: code=%d", result.Code)
+		return fmt.Errorf(errFeishuAPI, result.Code)
 	}
 
 	return nil
@@ -634,7 +639,7 @@ func (f *FeishuChannel) SendStreamCard(feishuMsg *FeishuMessage, content string,
 		receiver = feishuMsg.ChatID
 	}
 
-	url := fmt.Sprintf("%s/im/v1/messages?receive_id_type=%s", feishuAPIBase, receiveIDType)
+	url := fmt.Sprintf(feishuAPIBase+apiPathMessages, receiveIDType)
 
 	data := map[string]string{
 		"receive_id": receiver,
@@ -675,7 +680,7 @@ func (f *FeishuChannel) SendStreamCard(feishuMsg *FeishuMessage, content string,
 	}
 
 	if result.Code != 0 {
-		return "", fmt.Errorf("feishu api error: code=%d", result.Code)
+		return "", fmt.Errorf(errFeishuAPI, result.Code)
 	}
 
 	return result.Data.MessageID, nil
@@ -725,7 +730,7 @@ func (f *FeishuChannel) UpdateStreamCard(msgID, content string, isComplete bool)
 	}
 
 	if result.Code != 0 {
-		return fmt.Errorf("feishu api error: code=%d", result.Code)
+		return fmt.Errorf(errFeishuAPI, result.Code)
 	}
 
 	return nil

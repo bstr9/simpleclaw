@@ -209,38 +209,6 @@ func (s *Scheduler) ListTasks() []*Task {
 	return s.store.LoadAll()
 }
 
-// Reload 重新从文件加载任务（支持外部修改后热重载）
-// 会清除当前内存中的任务，重新从文件加载并调度
-func (s *Scheduler) Reload() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for taskID, entryID := range s.entries {
-		s.cron.Remove(entryID)
-		delete(s.entries, taskID)
-	}
-
-	if err := s.store.Reload(); err != nil {
-		return fmt.Errorf("重新加载任务失败: %w", err)
-	}
-
-	tasks := s.store.LoadAll()
-	for _, task := range tasks {
-		if task.Enabled {
-			if err := s.scheduleTask(task); err != nil {
-				logger.Warn("[Scheduler] 重新加载任务失败",
-					zap.String("task_id", task.ID),
-					zap.Error(err))
-			}
-		}
-	}
-
-	logger.Info("[Scheduler] 任务已重新加载",
-		zap.Int("tasks", len(s.entries)))
-
-	return nil
-}
-
 // scheduleTask 调度任务
 func (s *Scheduler) scheduleTask(task *Task) error {
 	if entryID, exists := s.entries[task.ID]; exists {
