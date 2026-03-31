@@ -14,9 +14,9 @@
 
 | 插件 | 目录 | 说明 |
 |------|------|------|
-| tool | tool/ | 工具调用框架 (1523行) |
-| linkai | linkai/ | LinkAI 集成 (1853行) |
-| godcmd | godcmd/ | 管理员命令 |
+| tool | tool/ | 工具调用框架 (1654行) |
+| linkai | linkai/ | LinkAI 集成 (1945行) |
+| godcmd | godcmd/ | 管理员命令 (768行) |
 | banwords | banwords/ | 敏感词过滤 |
 | keyword | keyword/ | 关键词回复 |
 | hello | hello/ | 示例插件 |
@@ -71,6 +71,6 @@ EventOnReceiveMessage → EventOnHandleContext → EventOnDecorateReply → Even
 
 | 文件 | 行数 | 建议 |
 |------|------|------|
-| `linkai/linkai.go` | 1853 | 拆分 knowledge/midjourney/summary |
-| `tool/tool.go` | 1523 | 拆分 registry/executor/builtin |
-| `godcmd/godcmd.go` | 710 | 提取权限管理 |
+| `linkai/linkai.go` | 1945 | 拆分 knowledge/midjourney/summary |
+| `tool/tool.go` | 1654 | 拆分 registry/executor/builtin |
+| `godcmd/godcmd.go` | 768 | 提取权限管理 |

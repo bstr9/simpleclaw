@@ -58,7 +58,7 @@ type Storage interface {
 
 ## HOTSPOT
 
-`long_term.go` (1011行) — 建议拆分为:
+`long_term.go` (1040行) — 建议拆分为:
 - `sqlite_store.go` - SQLite 操作
 - `vector_search.go` - 向量索引
 - `indexer.go` - 索引管理

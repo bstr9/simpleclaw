@@ -73,6 +73,6 @@ type Storage interface {
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `memory/long_term.go` | 1011 | 向量搜索 + SQLite |
-| `skills/registry.go` | 684 | 技能解析 |
+| `memory/long_term.go` | 1040 | 向量搜索 + SQLite |
+| `skills/registry.go` | 708 | 技能解析 |
 | `chat/chat.go` | 539 | 对话管理 |
