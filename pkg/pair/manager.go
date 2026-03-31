@@ -132,6 +132,7 @@ func (m *Manager) CompletePair(sessionID, userID, channelType string) error {
 		ChannelType: channelType,
 		GrantedAt:   time.Now(),
 		ExpiresAt:   status.ExpiresAt,
+		Name:        status.Name,
 	}
 	if err := m.store.SaveUserAuth(auth); err != nil {
 		return fmt.Errorf("failed to save user auth: %w", err)
@@ -151,7 +152,8 @@ func (m *Manager) CompletePair(sessionID, userID, channelType string) error {
 	logger.Info("[PairManager] Pair completed",
 		zap.String("session_id", sessionID),
 		zap.String("user_id", userID),
-		zap.String("channel", channelType))
+		zap.String("channel", channelType),
+		zap.String("name", status.Name))
 
 	return nil
 }

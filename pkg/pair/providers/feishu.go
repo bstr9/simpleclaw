@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bstr9/simpleclaw/pkg/logger"
@@ -25,12 +26,16 @@ const (
 type FeishuProvider struct {
 	appID     string
 	appSecret string
+
+	mu           sync.RWMutex
+	pendingCodes map[string]string // userID -> deviceCode
 }
 
 func NewFeishuProvider(appID, appSecret string) *FeishuProvider {
 	return &FeishuProvider{
-		appID:     appID,
-		appSecret: appSecret,
+		appID:        appID,
+		appSecret:    appSecret,
+		pendingCodes: make(map[string]string),
 	}
 }
 
@@ -52,7 +57,6 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// 先初始化 lark-cli 配置，确保使用正确的 app_id
 	initCmd := exec.CommandContext(ctx, "lark-cli", "config", "init",
 		"--app-id", p.appID,
 		"--brand", "feishu",
@@ -85,6 +89,9 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	}
 
 	if err := json.Unmarshal(output, &result); err == nil && result.VerificationURL != "" {
+		p.mu.Lock()
+		p.pendingCodes[userID] = result.DeviceCode
+		p.mu.Unlock()
 		return result.VerificationURL, nil
 	}
 
@@ -108,10 +115,41 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 }
 
 func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
+	p.mu.RLock()
+	deviceCode, hasCode := p.pendingCodes[userID]
+	p.mu.RUnlock()
+
+	if hasCode && deviceCode != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "lark-cli", "auth", "login",
+			"--device-code", deviceCode,
+			"--json",
+		)
+		cmd.Env = os.Environ()
+
+		output, _ := cmd.CombinedOutput()
+
+		var result struct {
+			OK    bool `json:"ok"`
+			Error struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(output, &result) == nil && result.OK {
+			p.mu.Lock()
+			delete(p.pendingCodes, userID)
+			p.mu.Unlock()
+			logger.Info("[FeishuProvider] User authorized via device code", zap.String("user_id", userID))
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "status", "--json")
+	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "status")
 
 	cmd.Env = append(os.Environ(),
 		"LARK_APP_ID="+p.appID,
@@ -124,26 +162,70 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 	}
 
 	var status struct {
-		TokenStatus string `json:"tokenStatus"`
-		UserOpenID  string `json:"userOpenId"`
-		UserName    string `json:"userName"`
-		ExpiresAt   string `json:"expiresAt"`
+		AppID     string `json:"appId"`
+		Brand     string `json:"brand"`
+		DefaultAs string `json:"defaultAs"`
+		Identity  string `json:"identity"`
+		Note      string `json:"note"`
 	}
 
 	if err := json.Unmarshal(output, &status); err != nil {
 		return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
 	}
 
-	if status.TokenStatus == "valid" {
-		expiresAt, _ := time.Parse(time.RFC3339, status.ExpiresAt)
+	if status.Identity == "user" || (status.Identity == "bot" && status.Note == "") {
+		userInfo, _ := p.getUserInfo()
 		return pair.PairStatus{
-			Paired:    true,
-			Status:    StatusActive,
-			ExpiresAt: expiresAt,
+			Paired: true,
+			Status: StatusActive,
+			Name:   userInfo.Name,
+			OpenID: userInfo.OpenID,
 		}, nil
 	}
 
 	return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
+}
+
+type feishuUserInfo struct {
+	Name   string
+	OpenID string
+}
+
+func (p *FeishuProvider) getUserInfo() (*feishuUserInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "lark-cli", "contact", "+get-user", "--format", "json")
+	cmd.Env = os.Environ()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("lark-cli contact +get-user failed: %w", err)
+	}
+
+	var result struct {
+		OK       bool   `json:"ok"`
+		Identity string `json:"identity"`
+		Data     struct {
+			User struct {
+				Name   string `json:"name"`
+				OpenID string `json:"open_id"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse user info: %w", err)
+	}
+
+	if !result.OK {
+		return nil, fmt.Errorf("get user info failed")
+	}
+
+	return &feishuUserInfo{
+		Name:   result.Data.User.Name,
+		OpenID: result.Data.User.OpenID,
+	}, nil
 }
 
 func (p *FeishuProvider) IsUserAuthorized(userID string) (bool, error) {

@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +38,7 @@ type FeishuExtension struct {
 	api          extension.ExtensionAPI
 	started      bool
 	extensionDir string
+	workspaceDir string
 	stopUpdate   chan struct{}
 }
 
@@ -142,6 +145,8 @@ func (e *FeishuExtension) initPairManager() error {
 	if workspaceDir == "" {
 		workspaceDir = "./data/workspace"
 	}
+
+	e.workspaceDir = workspaceDir
 
 	store, err := pair.NewStore(workspaceDir)
 	if err != nil {
@@ -311,7 +316,10 @@ func (e *FeishuExtension) createChannel() (*feishu.FeishuChannel, error) {
 	e.channel = feishu.NewFeishuChannel(feishuConfig)
 
 	if e.pairManager != nil {
-		e.channel.SetPairManager(&pairManagerAdapter{e.pairManager})
+		e.channel.SetPairManager(&pairManagerAdapter{
+			Manager:      e.pairManager,
+			workspaceDir: e.workspaceDir,
+		})
 	}
 
 	logger.Info("[FeishuExtension] Channel created",
@@ -323,6 +331,7 @@ func (e *FeishuExtension) createChannel() (*feishu.FeishuChannel, error) {
 
 type pairManagerAdapter struct {
 	*pair.Manager
+	workspaceDir string
 }
 
 func (a *pairManagerAdapter) CheckSessionPair(sessionID, userID, channelType string) (*feishu.PairCheckResult, error) {
@@ -347,4 +356,45 @@ func (a *pairManagerAdapter) StartPair(sessionID, userID, channelType string) (*
 		AuthURL: result.AuthURL,
 		Message: result.Message,
 	}, nil
+}
+
+func (a *pairManagerAdapter) CompletePair(sessionID, userID, channelType string) error {
+	err := a.Manager.CompletePair(sessionID, userID, channelType)
+	if err != nil {
+		return err
+	}
+
+	auth, _ := a.Manager.GetUserAuth(userID, channelType)
+	if auth != nil && auth.Name != "" {
+		a.updateUserMD(auth.Name, userID)
+	}
+
+	return nil
+}
+
+func (a *pairManagerAdapter) updateUserMD(name, userID string) {
+	if a.workspaceDir == "" {
+		return
+	}
+
+	userMDPath := a.workspaceDir + "/USER.md"
+	content, err := os.ReadFile(userMDPath)
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var updated []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "- **Name:**") {
+			updated = append(updated, fmt.Sprintf("- **Name:** %s", name))
+		} else if strings.HasPrefix(line, "- **What to call them:**") {
+			updated = append(updated, fmt.Sprintf("- **What to call them:** %s", name))
+		} else {
+			updated = append(updated, line)
+		}
+	}
+
+	os.WriteFile(userMDPath, []byte(strings.Join(updated, "\n")), 0644)
+	logger.Info("[FeishuExtension] Updated USER.md with user name", zap.String("name", name))
 }

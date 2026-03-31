@@ -13,6 +13,8 @@ type PairStatus struct {
 	Status    string    `json:"status"`
 	AuthURL   string    `json:"auth_url,omitempty"`
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	Name      string    `json:"name,omitempty"`
+	OpenID    string    `json:"open_id,omitempty"`
 }
 
 type UserAuth struct {
@@ -23,6 +25,7 @@ type UserAuth struct {
 	Scopes       []string  `json:"scopes"`
 	GrantedAt    time.Time `json:"granted_at"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	Name         string    `json:"name,omitempty"`
 }
 
 type SessionPair struct {

@@ -113,6 +113,7 @@ type FeishuChannel struct {
 type PairManager interface {
 	CheckSessionPair(sessionID, userID, channelType string) (*PairCheckResult, error)
 	StartPair(sessionID, userID, channelType string) (*PairResult, error)
+	CompletePair(sessionID, userID, channelType string) error
 }
 
 // PairCheckResult 配对检查结果

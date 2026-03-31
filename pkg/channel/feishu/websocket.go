@@ -103,20 +103,25 @@ func (w *WSClient) handleMessage(ctx context.Context, event *larkim.P2MessageRec
 	}
 	w.channel.markMessageProcessed(msgID)
 
-	logger.Debug("[Feishu WS] 收到消息",
+	senderOpenID := safeString(sender.SenderId.OpenId)
+	senderUserID := safeString(sender.SenderId.UserId)
+
+	logger.Info("[Feishu WS] 收到消息",
 		zap.String("msg_id", msgID),
 		zap.String("msg_type", safeString(msg.MessageType)),
 		zap.String("chat_id", safeString(msg.ChatId)),
-		zap.String("content", safeString(msg.Content)))
+		zap.String("chat_type", safeString(msg.ChatType)),
+		zap.String("sender_open_id", senderOpenID),
+		zap.String("sender_user_id", senderUserID))
 
 	feishuMsg := &FeishuMessage{
 		MsgID:        msgID,
 		CreateTime:   parseCreateTime(safeString(msg.CreateTime)),
 		IsGroupChat:  safeString(msg.ChatType) == "group",
 		ChatID:       safeString(msg.ChatId),
-		SenderID:     safeString(sender.SenderId.UserId),
-		SenderOpenID: safeString(sender.SenderId.OpenId),
-		OpenID:       safeString(sender.SenderId.OpenId),
+		SenderID:     senderUserID,
+		SenderOpenID: senderOpenID,
+		OpenID:       senderOpenID,
 	}
 	feishuMsg.MsgType = MessageType(safeString(msg.MessageType))
 	feishuMsg.RawContent = safeString(msg.Content)
@@ -183,19 +188,30 @@ func (w *WSClient) processMessageAsync(feishuMsg *FeishuMessage) {
 		if err != nil {
 			logger.Warn("[Feishu WS] Pair check failed", zap.Error(err))
 		} else if !pairResult.Paired {
-			pairStart, err := w.channel.pairManager.StartPair(sessionID, userID, "feishu")
-			if err != nil {
-				logger.Error("[Feishu WS] Failed to start pair", zap.Error(err))
+			// 尝试完成授权：检查用户是否已在浏览器中完成授权
+			// 这解决了用户授权后状态未更新的问题
+			completeErr := w.channel.pairManager.CompletePair(sessionID, userID, "feishu")
+			if completeErr == nil {
+				// 授权成功，继续处理消息
+				logger.Info("[Feishu WS] Pair completed on-the-fly",
+					zap.String("session_id", sessionID),
+					zap.String("user_id", userID))
 			} else {
-				// 使用 Markdown 格式的可点击链接
-				replyMsg := fmt.Sprintf("🔐 请先授权以使用完整功能\n\n[👉 点击授权](%s)", pairStart.AuthURL)
-				reply := &types.Reply{Type: types.ReplyText, Content: replyMsg}
-				if sendErr := w.channel.Send(reply, msgCtx); sendErr != nil {
-					logger.Error("[Feishu WS] 发送配对链接失败", zap.Error(sendErr))
+				// 仍然未授权，发送授权链接
+				pairStart, err := w.channel.pairManager.StartPair(sessionID, userID, "feishu")
+				if err != nil {
+					logger.Error("[Feishu WS] Failed to start pair", zap.Error(err))
+				} else {
+					// 使用 Markdown 格式的可点击链接
+					replyMsg := fmt.Sprintf("🔐 请先授权以使用完整功能\n\n[👉 点击授权](%s)", pairStart.AuthURL)
+					reply := &types.Reply{Type: types.ReplyText, Content: replyMsg}
+					if sendErr := w.channel.Send(reply, msgCtx); sendErr != nil {
+						logger.Error("[Feishu WS] 发送配对链接失败", zap.Error(sendErr))
+					}
 				}
+				w.channel.RemoveTypingReaction(msgID, reactionID)
+				return
 			}
-			w.channel.RemoveTypingReaction(msgID, reactionID)
-			return
 		}
 	}
 
