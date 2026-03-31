@@ -1235,7 +1235,7 @@ func buildPostContent(text string) string {
 	content := map[string]any{
 		"zh_cn": map[string]any{
 			"content": [][]map[string]string{
-				{{"tag": "text", "text": text}},
+				{{"tag": "md", "text": text}},
 			},
 		},
 	}
