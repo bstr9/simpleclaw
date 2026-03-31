@@ -56,11 +56,9 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	initCmd := exec.CommandContext(ctx, "lark-cli", "config", "init",
 		"--app-id", p.appID,
 		"--brand", "feishu",
+		"--app-secret-stdin",
 	)
 	initCmd.Env = os.Environ()
-	initCmd.Env = append(initCmd.Env, "LARK_APP_SECRET="+p.appSecret)
-
-	// 通过 stdin 传递 app_secret，避免命令行暴露
 	initCmd.Stdin = strings.NewReader(p.appSecret + "\n")
 
 	if _, err := initCmd.CombinedOutput(); err != nil {
