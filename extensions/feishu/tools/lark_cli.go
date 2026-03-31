@@ -456,7 +456,10 @@ func (t *LarkCLITool) Execute(params map[string]any) (*agent.ToolResult, error) 
 
 	// 检测是否已安装
 	if !t.installed {
-		return agent.NewErrorToolResult(fmt.Errorf("lark-cli 未安装，请先执行 install 操作")), nil
+		t.installed = checkLarkCLIInstalled()
+		if !t.installed {
+			return agent.NewErrorToolResult(fmt.Errorf("lark-cli 未安装，请先执行 install 操作")), nil
+		}
 	}
 
 	// 构建完整命令
@@ -470,7 +473,7 @@ func (t *LarkCLITool) Execute(params map[string]any) (*agent.ToolResult, error) 
 
 	output, err := t.runCommand(args, timeout)
 	if err != nil {
-		return agent.NewErrorToolResult(err), nil
+		return agent.NewErrorToolResult(fmt.Errorf("命令执行失败: %w\n命令: lark-cli %v", err, args)), nil
 	}
 
 	return agent.NewToolResult(output), nil
