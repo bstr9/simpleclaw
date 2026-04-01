@@ -360,16 +360,32 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uptime := time.Since(s.startTime).Round(time.Second)
+	cfg := config.Get()
 
 	status := map[string]any{
-		"version":      "1.0.0",
-		"uptime":       uptime.String(),
-		"channels":     s.getChannelStatuses(),
-		"configured":   s.isConfigured(),
-		"has_password": s.hasPassword(),
+		"version":        "1.0.0",
+		"uptime":         uptime.String(),
+		"channels":       s.getChannelStatuses(),
+		"configured":     s.isConfigured(),
+		"has_password":   s.hasPassword(),
+		"has_llm_config": cfg.OpenAIAPIKey != "" && cfg.OpenAIAPIKey != "YOUR_OPENAI_API_KEY_HERE",
+		"has_channels":   cfg.ChannelType != "",
+		"llm_provider":   cfg.Model,
+		"api_key":        maskAPIKey(cfg.OpenAIAPIKey),
+		"base_url":       cfg.OpenAIAPIBase,
+		"model":          cfg.ModelName,
+		"channel_type":   cfg.ChannelType,
+		"admin_username": s.config.Username,
 	}
 
 	writeAPISuccess(w, status)
+}
+
+func maskAPIKey(key string) string {
+	if key == "" || len(key) < 8 {
+		return ""
+	}
+	return key[:4] + "****" + key[len(key)-4:]
 }
 
 func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {

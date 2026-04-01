@@ -26,6 +26,10 @@
           <div class="provider-desc">
             {{ currentProviderDesc }}
           </div>
+          <div v-if="existingConfig.has_llm_config" class="already-configured">
+            <el-tag type="success">已配置</el-tag>
+            <span>当前使用: {{ existingConfig.llm_provider }}</span>
+          </div>
         </div>
 
         <div v-show="currentStep === 1" class="step-panel">
@@ -36,19 +40,19 @@
                 v-model="setupData.apiKey"
                 type="password"
                 show-password
-                placeholder="请输入 API Key"
+                :placeholder="existingConfig.api_key ? '已配置 (点击修改)' : '请输入 API Key'"
               />
             </el-form-item>
             <el-form-item label="Base URL">
               <el-input
                 v-model="setupData.baseUrl"
-                placeholder="可选，自定义 API 端点"
+                :placeholder="existingConfig.base_url || '可选，自定义 API 端点'"
               />
             </el-form-item>
             <el-form-item label="模型名称">
               <el-input
                 v-model="setupData.model"
-                placeholder="默认模型名称"
+                :placeholder="existingConfig.model || '默认模型名称'"
               />
             </el-form-item>
             <el-form-item>
@@ -72,6 +76,10 @@
               </div>
             </el-checkbox>
           </el-checkbox-group>
+          <div v-if="existingConfig.has_channels" class="already-configured">
+            <el-tag type="success">已配置</el-tag>
+            <span>当前渠道: {{ existingConfig.channel_type }}</span>
+          </div>
         </div>
 
         <div v-show="currentStep === 3" class="step-panel">
@@ -115,23 +123,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { useConfigStore } from '@/stores/config'
+import { configApi } from '@/api'
 
 const router = useRouter()
-const configStore = useConfigStore()
 
 const currentStep = ref(0)
 const testing = ref(false)
 const submitting = ref(false)
 const testResult = ref(null)
 const adminFormRef = ref(null)
+const existingConfig = ref({})
 
 const setupData = ref({
   llmProvider: 'openai',
   apiKey: '',
   baseUrl: '',
   model: '',
-  channels: ['terminal'],
+  channels: [],
   adminUsername: '',
   adminPassword: '',
   adminPasswordConfirm: ''
@@ -195,7 +203,7 @@ async function testConnection() {
   testResult.value = null
   
   try {
-    const result = await configStore.testLlm({
+    await configApi.testLlm({
       provider: setupData.value.llmProvider,
       api_key: setupData.value.apiKey,
       base_url: setupData.value.baseUrl,
@@ -219,13 +227,13 @@ async function nextStep() {
   if (currentStep.value === 0) {
     currentStep.value++
   } else if (currentStep.value === 1) {
-    if (!setupData.value.apiKey) {
+    if (!setupData.value.apiKey && !existingConfig.value.has_llm_config) {
       ElMessage.warning('请输入 API Key')
       return
     }
     currentStep.value++
   } else if (currentStep.value === 2) {
-    if (setupData.value.channels.length === 0) {
+    if (setupData.value.channels.length === 0 && !existingConfig.value.has_channels) {
       ElMessage.warning('请至少选择一个渠道')
       return
     }
@@ -243,19 +251,28 @@ async function submitSetup() {
   submitting.value = true
   
   try {
-    await configStore.setup({
-      llm: {
-        provider: setupData.value.llmProvider,
-        api_key: setupData.value.apiKey,
-        base_url: setupData.value.baseUrl,
-        model: setupData.value.model
-      },
-      channels: setupData.value.channels,
-      admin: {
-        username: setupData.value.adminUsername,
-        password: setupData.value.adminPassword
+    const data = {
+      password: setupData.value.adminPassword
+    }
+    
+    if (!existingConfig.value.has_llm_config) {
+      data.model = setupData.value.llmProvider
+      data.api_key = setupData.value.apiKey
+      data.api_base = setupData.value.baseUrl
+      if (setupData.value.model) {
+        data.model = setupData.value.model
       }
-    })
+    }
+    
+    if (!existingConfig.value.has_channels && setupData.value.channels.length > 0) {
+      data.channel = setupData.value.channels.join(',')
+    }
+    
+    if (setupData.value.adminUsername) {
+      data.username = setupData.value.adminUsername
+    }
+    
+    await configApi.setup(data)
     
     ElMessage.success('配置完成！')
     router.push('/login')
@@ -268,9 +285,38 @@ async function submitSetup() {
 
 onMounted(async () => {
   try {
-    const status = await configStore.fetchStatus()
-    if (status.configured) {
+    const res = await configApi.getStatus()
+    const status = res.data || res
+    existingConfig.value = status
+    
+    if (status.has_password) {
       router.replace('/login')
+      return
+    }
+    
+    if (status.llm_provider) {
+      setupData.value.llmProvider = status.llm_provider
+    }
+    if (status.api_key) {
+      setupData.value.apiKey = status.api_key
+    }
+    if (status.base_url) {
+      setupData.value.baseUrl = status.base_url
+    }
+    if (status.model) {
+      setupData.value.model = status.model
+    }
+    if (status.channel_type) {
+      setupData.value.channels = status.channel_type.split(',').map(s => s.trim())
+    }
+    if (status.admin_username) {
+      setupData.value.adminUsername = status.admin_username
+    }
+    
+    if (status.has_llm_config && status.has_channels) {
+      currentStep.value = 3
+    } else if (status.has_llm_config) {
+      currentStep.value = 2
     }
   } catch (error) {
     void error
@@ -370,5 +416,17 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   gap: 15px;
+}
+
+.already-configured {
+  margin-top: 15px;
+  padding: 10px;
+  background: #f0f9eb;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #67c23a;
 }
 </style>
