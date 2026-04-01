@@ -162,8 +162,8 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.isConfigured() {
-		writeAPIError(w, http.StatusBadRequest, "Already configured")
+	if s.hasPassword() {
+		writeAPIError(w, http.StatusBadRequest, "Already configured with password")
 		return
 	}
 
@@ -173,14 +173,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Model == "" || req.APIKey == "" || req.Channel == "" {
-		writeAPIError(w, http.StatusBadRequest, "model, api_key and channel are required")
-		return
-	}
-
-	if req.Username == "" {
-		req.Username = "admin"
-	}
 	if req.Password == "" {
 		writeAPIError(w, http.StatusBadRequest, "password is required")
 		return
@@ -192,20 +184,32 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := config.Get()
-	cfg.Model = req.Model
-	cfg.OpenAIAPIKey = req.APIKey
-	if req.APIBase != "" {
-		cfg.OpenAIAPIBase = req.APIBase
+	username := req.Username
+	if username == "" {
+		username = "admin"
 	}
-	cfg.ChannelType = req.Channel
-	cfg.Agent = true
+
+	cfg := config.Get()
+
+	if !s.isConfigured() {
+		if req.Model == "" || req.APIKey == "" || req.Channel == "" {
+			writeAPIError(w, http.StatusBadRequest, "model, api_key and channel are required for initial setup")
+			return
+		}
+		cfg.Model = req.Model
+		cfg.OpenAIAPIKey = req.APIKey
+		if req.APIBase != "" {
+			cfg.OpenAIAPIBase = req.APIBase
+		}
+		cfg.ChannelType = req.Channel
+		cfg.Agent = true
+	}
 
 	adminCfg := &AdminConfig{
 		Enabled:      true,
 		Host:         s.config.Host,
 		Port:         s.config.Port,
-		Username:     req.Username,
+		Username:     username,
 		PasswordHash: string(passwordHash),
 	}
 
@@ -469,6 +473,10 @@ func getContentType(path string) string {
 func (s *Server) isConfigured() bool {
 	cfg := config.Get()
 	return cfg.OpenAIAPIKey != "" && cfg.OpenAIAPIKey != "YOUR_OPENAI_API_KEY_HERE"
+}
+
+func (s *Server) hasPassword() bool {
+	return s.config.PasswordHash != ""
 }
 
 func (s *Server) saveConfig(newConfig map[string]any) error {
