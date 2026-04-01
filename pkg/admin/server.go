@@ -391,12 +391,6 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 			http.ServeFile(w, r, filePath)
 			return
 		}
-
-		indexPath := filepath.Join(s.config.StaticDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			http.ServeFile(w, r, indexPath)
-			return
-		}
 	}
 
 	if s.useEmbedded && s.staticFS != nil {
@@ -405,18 +399,63 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 			cleanPath = "index.html"
 		}
 
-		if _, err := fs.Stat(s.staticFS, cleanPath); err == nil {
-			http.FileServer(http.FS(s.staticFS)).ServeHTTP(w, r)
+		content, err := fs.ReadFile(s.staticFS, cleanPath)
+		if err == nil {
+			contentType := getContentType(cleanPath)
+			w.Header().Set("Content-Type", contentType)
+			if strings.HasPrefix(cleanPath, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
+			w.Write(content)
 			return
 		}
 
-		if _, err := fs.Stat(s.staticFS, "index.html"); err == nil {
-			http.ServeFileFS(w, r, s.staticFS, "index.html")
+		ext := filepath.Ext(cleanPath)
+		if ext != "" && ext != ".html" {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+
+		indexContent, err := fs.ReadFile(s.staticFS, "index.html")
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Write(indexContent)
 			return
 		}
 	}
 
 	http.Error(w, "Admin UI not available. Build the frontend first.", http.StatusNotFound)
+}
+
+func getContentType(path string) string {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff", ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func (s *Server) isConfigured() bool {
