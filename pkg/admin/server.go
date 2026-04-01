@@ -80,7 +80,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/config", s.withAuth(s.handleConfig))
 	s.mux.HandleFunc("/admin/api/config/validate", s.withAuth(s.handleValidate))
 	s.mux.HandleFunc("/admin/api/test/llm", s.withAuth(s.handleTestLLM))
-	s.mux.HandleFunc("/admin/api/status", s.withAuth(s.handleStatus))
+	s.mux.HandleFunc("/admin/api/status", s.handleStatus)
 	s.mux.HandleFunc("/admin/api/channels", s.withAuth(s.handleChannels))
 	s.mux.HandleFunc("/", s.handleSPA)
 }
