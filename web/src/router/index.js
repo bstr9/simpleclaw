@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { configApi } from '@/api'
 
 const routes = [
   {
@@ -41,6 +42,17 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
   if (to.meta.public) {
+    if (to.name === 'Login') {
+      try {
+        const status = await configApi.getStatus()
+        if (status.data && !status.data.has_password) {
+          next({ name: 'Setup' })
+          return
+        }
+      } catch (e) {
+        void e
+      }
+    }
     next()
     return
   }

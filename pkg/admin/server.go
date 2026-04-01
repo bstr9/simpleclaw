@@ -361,11 +361,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	uptime := time.Since(s.startTime).Round(time.Second)
 
-	status := SystemStatus{
-		Version:    "1.0.0",
-		Uptime:     uptime.String(),
-		Channels:   s.getChannelStatuses(),
-		Configured: s.isConfigured(),
+	status := map[string]any{
+		"version":      "1.0.0",
+		"uptime":       uptime.String(),
+		"channels":     s.getChannelStatuses(),
+		"configured":   s.isConfigured(),
+		"has_password": s.hasPassword(),
 	}
 
 	writeAPISuccess(w, status)
