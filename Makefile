@@ -2,14 +2,27 @@
 # SimpleClaw Makefile
 # ===========================================
 
-.PHONY: all build test coverage clean lint sonar help
+.PHONY: all build build-web test coverage clean lint sonar help
 
 # 默认目标
 all: build
 
 # 编译项目
-build:
+build: build-web
 	go build -o simpleclaw ./cmd/simpleclaw
+
+# 编译前端
+build-web:
+	@if [ -d "web" ]; then \
+		cd web && npm install && npm run build && mkdir -p ../pkg/admin/static && cp -r dist/* ../pkg/admin/static/; \
+		echo "前端编译完成，已输出到 pkg/admin/static/"; \
+	else \
+		echo "web 目录不存在，跳过前端编译"; \
+	fi
+
+# 开发模式运行前端
+dev-web:
+	cd web && npm install && npm run dev
 
 # 运行测试
 test:
@@ -40,11 +53,16 @@ clean:
 	rm -f simpleclaw
 	rm -f coverage.out coverage.html
 	rm -rf .scannerwork
+	rm -rf web/dist
+	rm -rf web/node_modules
+	rm -rf pkg/admin/static
 
 # 帮助
 help:
 	@echo "可用命令:"
-	@echo "  make build          - 编译项目"
+	@echo "  make build          - 编译项目（包含前端）"
+	@echo "  make build-web      - 仅编译前端"
+	@echo "  make dev-web        - 开发模式运行前端"
 	@echo "  make test           - 运行测试"
 	@echo "  make coverage       - 生成覆盖率报告"
 	@echo "  make coverage-stats - 显示覆盖率统计"
