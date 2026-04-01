@@ -506,7 +506,7 @@ func (c *Config) GetAdminConfig() *AdminConfig {
 		return &AdminConfig{
 			Enabled: true,
 			Host:    "0.0.0.0",
-			Port:    8081,
+			Port:    31415,
 		}
 	}
 	return c.Admin

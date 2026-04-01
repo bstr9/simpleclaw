@@ -216,6 +216,6 @@ func setDefaults(v *viper.Viper) {
 	// Admin 配置
 	v.SetDefault("admin.enabled", true)
 	v.SetDefault("admin.host", "0.0.0.0")
-	v.SetDefault("admin.port", 8081)
+	v.SetDefault("admin.port", 31415)
 	v.SetDefault("admin.username", "admin")
 }

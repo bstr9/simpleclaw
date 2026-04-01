@@ -14,7 +14,7 @@ func DefaultAdminConfig() *AdminConfig {
 	return &AdminConfig{
 		Enabled:       true,
 		Host:          "0.0.0.0",
-		Port:          8081,
+		Port:          31415,
 		Username:      "admin",
 		SessionSecret: "",
 		StaticDir:     "",
