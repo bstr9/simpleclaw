@@ -399,9 +399,15 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 			cleanPath = "index.html"
 		}
 
+		logger.Info("[Admin SPA] Request", zap.String("path", path), zap.String("cleanPath", cleanPath), zap.Bool("hasStaticFS", s.staticFS != nil))
+
 		content, err := fs.ReadFile(s.staticFS, cleanPath)
+		if err != nil {
+			logger.Warn("[Admin SPA] File not found in embed", zap.String("cleanPath", cleanPath), zap.Error(err))
+		}
 		if err == nil {
 			contentType := getContentType(cleanPath)
+			logger.Info("[Admin SPA] Serving file", zap.String("cleanPath", cleanPath), zap.String("contentType", contentType), zap.Int("size", len(content)))
 			w.Header().Set("Content-Type", contentType)
 			if strings.HasPrefix(cleanPath, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000")
@@ -414,12 +420,14 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 
 		ext := filepath.Ext(cleanPath)
 		if ext != "" && ext != ".html" {
+			logger.Warn("[Admin SPA] Static file not found", zap.String("path", cleanPath))
 			http.Error(w, "File not found", http.StatusNotFound)
 			return
 		}
 
 		indexContent, err := fs.ReadFile(s.staticFS, "index.html")
 		if err == nil {
+			logger.Info("[Admin SPA] Serving index.html")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Write(indexContent)
