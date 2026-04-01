@@ -54,6 +54,16 @@ func NewServer(cfg *AdminConfig, configPath string) *Server {
 		auth:       NewAuthManager(cfg),
 	}
 
+	if HasEmbeddedUI() {
+		s.staticFS = GetDistFS()
+		s.useEmbedded = true
+		logger.Info("[Admin] Using embedded static files")
+	} else if cfg.StaticDir != "" {
+		if _, err := os.Stat(cfg.StaticDir); err == nil {
+			logger.Info("[Admin] Using static directory", zap.String("dir", cfg.StaticDir))
+		}
+	}
+
 	s.registerRoutes()
 	return s
 }
@@ -390,20 +400,18 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.useEmbedded && s.staticFS != nil {
-		stripped, err := fs.Sub(s.staticFS, "dist")
-		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		cleanPath := strings.TrimPrefix(path, "/")
+		if cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		if _, err := fs.Stat(s.staticFS, cleanPath); err == nil {
+			http.FileServer(http.FS(s.staticFS)).ServeHTTP(w, r)
 			return
 		}
 
-		if _, err := fs.Stat(stripped, strings.TrimPrefix(path, "/")); err == nil {
-			http.FileServer(http.FS(stripped)).ServeHTTP(w, r)
-			return
-		}
-
-		indexFile, err := fs.Stat(stripped, "index.html")
-		if err == nil {
-			http.ServeFileFS(w, r, stripped, indexFile.Name())
+		if _, err := fs.Stat(s.staticFS, "index.html"); err == nil {
+			http.ServeFileFS(w, r, s.staticFS, "index.html")
 			return
 		}
 	}
