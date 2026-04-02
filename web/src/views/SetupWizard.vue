@@ -1,328 +1,255 @@
-<template>
-  <div class="setup-container">
-    <el-card class="setup-card">
-      <template #header>
-        <div class="card-header">
-          <h1>SimpleClaw 初始配置向导</h1>
-          <p>欢迎使用 SimpleClaw，请完成以下配置步骤</p>
-        </div>
-      </template>
-
-      <el-steps :active="currentStep" align-center finish-status="success">
-        <el-step title="选择 LLM" />
-        <el-step title="配置 API" />
-        <el-step title="选择渠道" />
-        <el-step title="设置账号" />
-      </el-steps>
-
-      <div class="step-content">
-        <div v-show="currentStep === 0" class="step-panel">
-          <h3>选择大语言模型提供商</h3>
-          <el-radio-group v-model="setupData.llmProvider" class="provider-group">
-            <el-radio-button v-for="provider in llmProviders" :key="provider.value" :value="provider.value">
-              {{ provider.label }}
-            </el-radio-button>
-          </el-radio-group>
-          <div class="provider-desc">
-            {{ currentProviderDesc }}
-          </div>
-          <div v-if="existingConfig.has_llm_config" class="already-configured">
-            <el-tag type="success">已配置</el-tag>
-            <span>当前使用: {{ existingConfig.llm_provider }}</span>
-          </div>
-        </div>
-
-        <div v-show="currentStep === 1" class="step-panel">
-          <h3>配置 API 连接</h3>
-          <el-form :model="setupData" label-width="100px">
-            <el-form-item label="API Key" required>
-              <el-input
-                v-model="setupData.apiKey"
-                type="password"
-                show-password
-                :placeholder="existingConfig.api_key ? '已配置 (点击修改)' : '请输入 API Key'"
-              />
-            </el-form-item>
-            <el-form-item label="Base URL">
-              <el-input
-                v-model="setupData.baseUrl"
-                :placeholder="existingConfig.base_url || '可选，自定义 API 端点'"
-              />
-            </el-form-item>
-            <el-form-item label="模型名称">
-              <el-input
-                v-model="setupData.model"
-                :placeholder="existingConfig.model || '默认模型名称'"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button @click="testConnection" :loading="testing">
-                测试连接
-              </el-button>
-              <span v-if="testResult" :class="['test-result', testResult.success ? 'success' : 'error']">
-                {{ testResult.message }}
-              </span>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <div v-show="currentStep === 2" class="step-panel">
-          <h3>选择默认渠道</h3>
-          <el-checkbox-group v-model="setupData.channels" class="channel-group">
-            <el-checkbox v-for="channel in availableChannels" :key="channel.value" :value="channel.value">
-              <div class="channel-item">
-                <span class="channel-name">{{ channel.label }}</span>
-                <span class="channel-desc">{{ channel.desc }}</span>
-              </div>
-            </el-checkbox>
-          </el-checkbox-group>
-          <div v-if="existingConfig.has_channels" class="already-configured">
-            <el-tag type="success">已配置</el-tag>
-            <span>当前渠道: {{ existingConfig.channel_type }}</span>
-          </div>
-        </div>
-
-        <div v-show="currentStep === 3" class="step-panel">
-          <h3>设置管理员账号</h3>
-          <el-form :model="setupData" label-width="100px" :rules="adminRules" ref="adminFormRef">
-            <el-form-item label="用户名" prop="adminUsername">
-              <el-input v-model="setupData.adminUsername" placeholder="管理员用户名" />
-            </el-form-item>
-            <el-form-item label="密码" prop="adminPassword">
-              <el-input
-                v-model="setupData.adminPassword"
-                type="password"
-                show-password
-                placeholder="管理员密码"
-              />
-            </el-form-item>
-            <el-form-item label="确认密码" prop="adminPasswordConfirm">
-              <el-input
-                v-model="setupData.adminPasswordConfirm"
-                type="password"
-                show-password
-                placeholder="再次输入密码"
-              />
-            </el-form-item>
-          </el-form>
-        </div>
-      </div>
-
-      <div class="step-actions">
-        <el-button v-if="currentStep > 0" @click="prevStep">上一步</el-button>
-        <el-button v-if="currentStep < 3" type="primary" @click="nextStep">下一步</el-button>
-        <el-button v-else type="primary" @click="submitSetup" :loading="submitting">
-          完成配置
-        </el-button>
-      </div>
-    </el-card>
-  </div>
-</template>
-
-<script setup>
-import { ref, computed, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { configApi } from '@/api'
+import type { LLMProvider } from '@/types'
 
 const router = useRouter()
 
 const currentStep = ref(0)
-const testing = ref(false)
-const submitting = ref(false)
-const testResult = ref(null)
-const adminFormRef = ref(null)
-const existingConfig = ref({})
+const loading = ref(false)
+const providers = ref<LLMProvider[]>([])
 
-const setupData = ref({
-  llmProvider: 'openai',
+const form = ref({
+  provider: '',
   apiKey: '',
-  baseUrl: '',
-  model: '',
-  channels: [],
-  adminUsername: '',
+  apiBase: '',
+  modelName: '',
   adminPassword: '',
-  adminPasswordConfirm: ''
+  confirmPassword: ''
 })
 
-const llmProviders = [
-  { value: 'openai', label: 'OpenAI', desc: 'GPT-4, GPT-3.5 等模型' },
-  { value: 'claude', label: 'Claude', desc: 'Anthropic Claude 系列模型' },
-  { value: 'gemini', label: 'Gemini', desc: 'Google Gemini 系列模型' },
-  { value: 'azure', label: 'Azure OpenAI', desc: '微软 Azure OpenAI 服务' },
-  { value: 'ollama', label: 'Ollama', desc: '本地部署的 Ollama 服务' },
-  { value: 'deepseek', label: 'DeepSeek', desc: 'DeepSeek 大模型' }
+const steps = [
+  { title: '欢迎', icon: 'Compass' },
+  { title: '选择模型', icon: 'Cpu' },
+  { title: '设置密码', icon: 'Lock' },
+  { title: '完成', icon: 'CircleCheck' }
 ]
 
-const availableChannels = [
-  { value: 'terminal', label: 'Terminal', desc: '命令行终端' },
-  { value: 'web', label: 'Web', desc: 'Web 网页界面' },
-  { value: 'feishu', label: '飞书', desc: '飞书机器人' },
-  { value: 'dingtalk', label: '钉钉', desc: '钉钉机器人' },
-  { value: 'weixin', label: '微信', desc: '微信个人号' },
-  { value: 'wechatmp', label: '微信公众号', desc: '微信公众号' },
-  { value: 'qq', label: 'QQ', desc: 'QQ 机器人' }
-]
+const selectedProvider = computed(() => 
+  providers.value.find(p => p.name === form.value.provider)
+)
 
-const currentProviderDesc = computed(() => {
-  const provider = llmProviders.find(p => p.value === setupData.value.llmProvider)
-  return provider?.desc || ''
-})
+const availableModels = computed(() => 
+  selectedProvider.value?.models || []
+)
 
-const adminRules = {
-  adminUsername: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度 3-20 个字符', trigger: 'blur' }
-  ],
-  adminPassword: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 个字符', trigger: 'blur' }
-  ],
-  adminPasswordConfirm: [
-    { required: true, message: '请确认密码', trigger: 'blur' },
-    {
-      validator: (rule, value, callback) => {
-        if (value !== setupData.value.adminPassword) {
-          callback(new Error('两次输入的密码不一致'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'blur'
-    }
-  ]
-}
-
-async function testConnection() {
-  if (!setupData.value.apiKey) {
-    ElMessage.warning('请先输入 API Key')
-    return
+const canProceed = computed(() => {
+  switch (currentStep.value) {
+    case 0: return true
+    case 1: return form.value.provider && form.value.apiKey && form.value.modelName
+    case 2: return form.value.adminPassword.length >= 6 && 
+                  form.value.adminPassword === form.value.confirmPassword
+    case 3: return true
+    default: return false
   }
-  
-  testing.value = true
-  testResult.value = null
-  
+})
+
+async function loadProviders() {
   try {
-    await configApi.testLlm({
-      provider: setupData.value.llmProvider,
-      api_key: setupData.value.apiKey,
-      base_url: setupData.value.baseUrl,
-      model: setupData.value.model
-    })
-    testResult.value = { success: true, message: '连接成功！' }
-  } catch (error) {
-    testResult.value = { success: false, message: '连接失败，请检查配置' }
-  } finally {
-    testing.value = false
+    const result = await configApi.getProviders()
+    providers.value = result.providers || []
+    if (providers.value.length > 0) {
+      form.value.provider = providers.value[0].name
+      form.value.modelName = providers.value[0].models[0] || ''
+    }
+  } catch {
+    providers.value = [
+      { name: 'openai', label: 'OpenAI', models: ['gpt-4', 'gpt-3.5-turbo'] },
+      { name: 'anthropic', label: 'Anthropic', models: ['claude-3-opus', 'claude-3-sonnet'] },
+      { name: 'zhipu', label: '智谱AI', models: ['glm-4', 'glm-5'] },
+      { name: 'deepseek', label: 'DeepSeek', models: ['deepseek-chat'] },
+      { name: 'qwen', label: '通义千问', models: ['qwen-max'] }
+    ]
+    form.value.provider = 'openai'
+    form.value.modelName = 'gpt-4'
   }
 }
 
-function prevStep() {
-  if (currentStep.value > 0) {
-    currentStep.value--
-  }
+function onProviderChange() {
+  form.value.modelName = selectedProvider.value?.models[0] || ''
 }
 
 async function nextStep() {
-  if (currentStep.value === 0) {
-    currentStep.value++
-  } else if (currentStep.value === 1) {
-    if (!setupData.value.apiKey && !existingConfig.value.has_llm_config) {
-      ElMessage.warning('请输入 API Key')
+  if (currentStep.value === 1) {
+    loading.value = true
+    try {
+      await configApi.testLlm({
+        provider: form.value.provider,
+        api_key: form.value.apiKey,
+        model: form.value.modelName
+      })
+      ElMessage.success('连接测试成功')
+    } catch {
+      ElMessage.error('连接测试失败，请检查配置')
+      loading.value = false
       return
+    } finally {
+      loading.value = false
     }
-    currentStep.value++
-  } else if (currentStep.value === 2) {
-    if (setupData.value.channels.length === 0 && !existingConfig.value.has_channels) {
-      ElMessage.warning('请至少选择一个渠道')
-      return
-    }
-    currentStep.value++
   }
-}
-
-async function submitSetup() {
-  try {
-    await adminFormRef.value.validate()
-  } catch {
+  
+  if (currentStep.value === 2) {
+    await submitSetup()
     return
   }
   
-  submitting.value = true
-  
+  currentStep.value++
+}
+
+async function submitSetup() {
+  loading.value = true
   try {
-    const data = {
-      password: setupData.value.adminPassword
-    }
-    
-    if (!existingConfig.value.has_llm_config) {
-      data.model = setupData.value.llmProvider
-      data.api_key = setupData.value.apiKey
-      data.api_base = setupData.value.baseUrl
-      if (setupData.value.model) {
-        data.model = setupData.value.model
-      }
-    }
-    
-    if (!existingConfig.value.has_channels && setupData.value.channels.length > 0) {
-      data.channel = setupData.value.channels.join(',')
-    }
-    
-    if (setupData.value.adminUsername) {
-      data.username = setupData.value.adminUsername
-    }
-    
-    await configApi.setup(data)
-    
-    ElMessage.success('配置完成！')
-    router.push('/login')
+    await configApi.setup({
+      provider: form.value.provider,
+      apiKey: form.value.apiKey,
+      apiBase: form.value.apiBase || undefined,
+      modelName: form.value.modelName,
+      adminPassword: form.value.adminPassword
+    })
+    currentStep.value = 3
   } catch (error) {
-    ElMessage.error('配置失败，请重试')
+    ElMessage.error('设置失败，请重试')
   } finally {
-    submitting.value = false
+    loading.value = false
   }
 }
 
-onMounted(async () => {
-  try {
-    const res = await configApi.getStatus()
-    const status = res.data || res
-    existingConfig.value = status
-    
-    if (status.has_password) {
-      router.replace('/login')
-      return
-    }
-    
-    if (status.llm_provider) {
-      setupData.value.llmProvider = status.llm_provider
-    }
-    if (status.api_key) {
-      setupData.value.apiKey = status.api_key
-    }
-    if (status.base_url) {
-      setupData.value.baseUrl = status.base_url
-    }
-    if (status.model) {
-      setupData.value.model = status.model
-    }
-    if (status.channel_type) {
-      setupData.value.channels = status.channel_type.split(',').map(s => s.trim())
-    }
-    if (status.admin_username) {
-      setupData.value.adminUsername = status.admin_username
-    }
-    
-    if (status.has_llm_config && status.has_channels) {
-      currentStep.value = 3
-    } else if (status.has_llm_config) {
-      currentStep.value = 2
-    }
-  } catch (error) {
-    void error
-  }
-})
+function goToLogin() {
+  router.push('/login')
+}
+
+loadProviders()
 </script>
+
+<template>
+  <div class="setup-container">
+    <div class="setup-card">
+      <div class="setup-header">
+        <h1 class="setup-title">SimpleClaw</h1>
+        <p class="setup-subtitle">AI Agent 平台初始化设置</p>
+      </div>
+
+      <el-steps :active="currentStep" align-center class="setup-steps">
+        <el-step v-for="step in steps" :key="step.title" :title="step.title" :icon="step.icon" />
+      </el-steps>
+
+      <div class="setup-content">
+        <transition name="fade" mode="out-in">
+          <div v-if="currentStep === 0" key="welcome" class="step-content">
+            <div class="welcome-icon">
+              <el-icon :size="80" color="var(--color-primary-500)"><Promotion /></el-icon>
+            </div>
+            <h2>欢迎使用 SimpleClaw</h2>
+            <p>接下来将引导您完成初始化设置，整个过程大约需要 2 分钟。</p>
+            <ul class="feature-list">
+              <li><el-icon><Check /></el-icon> 配置 AI 模型</li>
+              <li><el-icon><Check /></el-icon> 设置管理员密码</li>
+              <li><el-icon><Check /></el-icon> 开始使用</li>
+            </ul>
+          </div>
+
+          <div v-else-if="currentStep === 1" key="model" class="step-content">
+            <h2>配置 AI 模型</h2>
+            <el-form label-position="top" class="setup-form">
+              <el-form-item label="模型提供商" required>
+                <el-select v-model="form.provider" @change="onProviderChange" style="width: 100%">
+                  <el-option 
+                    v-for="p in providers" 
+                    :key="p.name" 
+                    :label="p.label" 
+                    :value="p.name" 
+                  />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="API Key" required>
+                <el-input 
+                  v-model="form.apiKey" 
+                  type="password" 
+                  show-password 
+                  placeholder="请输入 API Key"
+                />
+              </el-form-item>
+
+              <el-form-item label="API Base URL（可选）">
+                <el-input 
+                  v-model="form.apiBase" 
+                  placeholder="自定义 API 地址，留空使用默认"
+                />
+              </el-form-item>
+
+              <el-form-item label="模型" required>
+                <el-select v-model="form.modelName" style="width: 100%">
+                  <el-option 
+                    v-for="m in availableModels" 
+                    :key="m" 
+                    :label="m" 
+                    :value="m" 
+                  />
+                </el-select>
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <div v-else-if="currentStep === 2" key="password" class="step-content">
+            <h2>设置管理员密码</h2>
+            <el-form label-position="top" class="setup-form">
+              <el-form-item label="管理员密码" required>
+                <el-input 
+                  v-model="form.adminPassword" 
+                  type="password" 
+                  show-password 
+                  placeholder="至少 6 位字符"
+                />
+              </el-form-item>
+              
+              <el-form-item label="确认密码" required>
+                <el-input 
+                  v-model="form.confirmPassword" 
+                  type="password" 
+                  show-password 
+                  placeholder="再次输入密码"
+                />
+              </el-form-item>
+            </el-form>
+            <p v-if="form.adminPassword && form.confirmPassword && form.adminPassword !== form.confirmPassword" class="error-text">
+              两次输入的密码不一致
+            </p>
+          </div>
+
+          <div v-else-if="currentStep === 3" key="complete" class="step-content">
+            <div class="success-icon">
+              <el-icon :size="80" color="var(--color-success)"><CircleCheckFilled /></el-icon>
+            </div>
+            <h2>设置完成！</h2>
+            <p>恭喜，SimpleClaw 已准备就绪。</p>
+            <p>您可以开始使用聊天功能，或登录管理后台进行更多配置。</p>
+          </div>
+        </transition>
+      </div>
+
+      <div class="setup-actions">
+        <el-button v-if="currentStep > 0 && currentStep < 3" @click="currentStep--">
+          上一步
+        </el-button>
+        <el-button 
+          v-if="currentStep < 3" 
+          type="primary" 
+          :disabled="!canProceed" 
+          :loading="loading"
+          @click="nextStep"
+        >
+          {{ currentStep === 2 ? '完成设置' : '下一步' }}
+        </el-button>
+        <el-button v-if="currentStep === 3" type="primary" @click="goToLogin">
+          进入登录
+        </el-button>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .setup-container {
@@ -330,103 +257,110 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  background: linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-neutral-100) 100%);
+  padding: var(--space-4);
 }
 
 .setup-card {
   width: 100%;
-  max-width: 600px;
+  max-width: 560px;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-8);
 }
 
-.card-header {
+.setup-header {
   text-align: center;
+  margin-bottom: var(--space-8);
 }
 
-.card-header h1 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
+.setup-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--color-primary-600);
+  margin: 0 0 var(--space-2);
 }
 
-.card-header p {
+.setup-subtitle {
+  color: var(--color-text-secondary);
   margin: 0;
-  color: #909399;
+}
+
+.setup-steps {
+  margin-bottom: var(--space-8);
+}
+
+.setup-content {
+  min-height: 280px;
 }
 
 .step-content {
-  margin: 30px 0;
-  min-height: 250px;
+  text-align: center;
 }
 
-.step-panel {
-  padding: 20px 0;
+.step-content h2 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-primary);
 }
 
-.step-panel h3 {
-  margin-bottom: 20px;
-  color: #303133;
+.step-content p {
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4);
 }
 
-.provider-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.welcome-icon, .success-icon {
+  margin-bottom: var(--space-6);
 }
 
-.provider-desc {
-  margin-top: 15px;
-  color: #909399;
-  font-size: 14px;
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-6) 0;
+  text-align: left;
+  display: inline-block;
 }
 
-.channel-group {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.channel-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.channel-name {
-  font-weight: 500;
-}
-
-.channel-desc {
-  font-size: 12px;
-  color: #909399;
-}
-
-.test-result {
-  margin-left: 15px;
-  font-size: 14px;
-}
-
-.test-result.success {
-  color: #67c23a;
-}
-
-.test-result.error {
-  color: #f56c6c;
-}
-
-.step-actions {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-}
-
-.already-configured {
-  margin-top: 15px;
-  padding: 10px;
-  background: #f0f9eb;
-  border-radius: 4px;
+.feature-list li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: #67c23a;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  color: var(--color-text-primary);
+}
+
+.feature-list .el-icon {
+  color: var(--color-success);
+}
+
+.setup-form {
+  text-align: left;
+  margin-top: var(--space-6);
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}
+
+.setup-actions .el-button {
+  min-width: 120px;
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

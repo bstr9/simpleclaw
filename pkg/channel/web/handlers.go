@@ -1,17 +1,18 @@
 package web
 
 import (
-	"github.com/bstr9/simpleclaw/pkg/common"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/bstr9/simpleclaw/pkg/common"
 	"github.com/bstr9/simpleclaw/pkg/config"
 	"github.com/bstr9/simpleclaw/pkg/logger"
 	"github.com/bstr9/simpleclaw/pkg/types"
@@ -72,10 +73,83 @@ func (w *WebChannel) registerRoutes() {
 
 func (w *WebChannel) handleRoot(rw http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.NotFound(rw, r)
+		w.serveSPA(rw, r)
 		return
 	}
-	http.Redirect(rw, r, "/chat", http.StatusFound)
+	w.serveSPA(rw, r)
+}
+
+func (w *WebChannel) serveSPA(rw http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	if w.config.StaticDir != "" {
+		filePath := filepath.Join(w.config.StaticDir, path)
+		if _, err := os.Stat(filePath); err == nil {
+			http.ServeFile(rw, r, filePath)
+			return
+		}
+	}
+
+	staticFS := GetStaticFS()
+	if staticFS != nil {
+		cleanPath := strings.TrimPrefix(path, "/")
+		if cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		content, err := fs.ReadFile(staticFS, cleanPath)
+		if err == nil {
+			contentType := getContentType(cleanPath)
+			rw.Header().Set("Content-Type", contentType)
+			if strings.HasPrefix(cleanPath, "assets/") {
+				rw.Header().Set("Cache-Control", "public, max-age=31536000")
+			} else {
+				rw.Header().Set("Cache-Control", "no-cache")
+			}
+			rw.Write(content)
+			return
+		}
+
+		ext := filepath.Ext(cleanPath)
+		if ext != "" && ext != ".html" {
+			http.Error(rw, "File not found", http.StatusNotFound)
+			return
+		}
+
+		indexContent, err := fs.ReadFile(staticFS, "index.html")
+		if err == nil {
+			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+			rw.Header().Set("Cache-Control", "no-cache")
+			rw.Write(indexContent)
+			return
+		}
+	}
+
+	http.Error(rw, "UI not available", http.StatusNotFound)
+}
+
+func getContentType(path string) string {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func (w *WebChannel) handleMessage(rw http.ResponseWriter, r *http.Request) {

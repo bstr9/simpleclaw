@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bstr9/simpleclaw/pkg/admin"
 	"github.com/bstr9/simpleclaw/pkg/api"
 	"github.com/bstr9/simpleclaw/pkg/bridge"
 	"github.com/bstr9/simpleclaw/pkg/channel"
@@ -137,8 +136,7 @@ func run() error {
 
 	initScheduler()
 	apiServer := startAPIServer(cfg)
-	adminServer := startAdminServer(cfg)
-	waitForShutdown(mgr, extMgr, apiServer, adminServer)
+	waitForShutdown(mgr, extMgr, apiServer)
 
 	return nil
 }
@@ -225,38 +223,7 @@ func startAPIServer(cfg *config.Config) *api.Server {
 	return server
 }
 
-func startAdminServer(cfg *config.Config) *admin.Server {
-	if !cfg.IsAdminEnabled() {
-		return nil
-	}
-
-	adminCfg := cfg.GetAdminConfig()
-	server := admin.NewServer(&admin.AdminConfig{
-		Enabled:      adminCfg.Enabled,
-		Host:         adminCfg.Host,
-		Port:         adminCfg.Port,
-		Username:     adminCfg.Username,
-		PasswordHash: adminCfg.PasswordHash,
-		StaticDir:    adminCfg.StaticDir,
-	}, configPath)
-
-	server.SetStaticFS(admin.GetDistFS())
-
-	go func() {
-		if err := server.Start(); err != nil {
-			logger.Error("Admin Server 启动失败", zap.Error(err))
-		}
-	}()
-
-	logger.Info("Admin Server 已启动",
-		zap.String("host", adminCfg.Host),
-		zap.Int("port", adminCfg.Port))
-
-	return server
-}
-
-// waitForShutdown 等待关闭信号并执行清理
-func waitForShutdown(mgr *channel.ChannelManager, extMgr *extension.Manager, apiServer *api.Server, adminServer *admin.Server) {
+func waitForShutdown(mgr *channel.ChannelManager, extMgr *extension.Manager, apiServer *api.Server) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -264,7 +231,6 @@ func waitForShutdown(mgr *channel.ChannelManager, extMgr *extension.Manager, api
 	logger.Info("收到退出信号，正在关闭...", zap.String("signal", sig.String()))
 
 	shutdownAPIServer(apiServer)
-	shutdownAdminServer(adminServer)
 	shutdownExtensions(extMgr)
 	shutdownScheduler()
 	mgr.Shutdown()
@@ -273,7 +239,6 @@ func waitForShutdown(mgr *channel.ChannelManager, extMgr *extension.Manager, api
 	logger.Close()
 }
 
-// shutdownAPIServer 关闭 API Server
 func shutdownAPIServer(server *api.Server) {
 	if server == nil {
 		return
@@ -285,18 +250,6 @@ func shutdownAPIServer(server *api.Server) {
 	}
 }
 
-func shutdownAdminServer(server *admin.Server) {
-	if server == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("Admin Server 关闭失败", zap.Error(err))
-	}
-}
-
-// shutdownExtensions 关闭扩展
 func shutdownExtensions(extMgr *extension.Manager) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

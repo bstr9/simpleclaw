@@ -1,31 +1,80 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+const form = ref({
+  username: '',
+  password: ''
+})
+const loading = ref(false)
+const showPassword = ref(false)
+
+async function handleLogin() {
+  if (!form.value.username || !form.value.password) {
+    ElMessage.warning('请输入用户名和密码')
+    return
+  }
+
+  loading.value = true
+  try {
+    await authStore.login({
+      username: form.value.username,
+      password: form.value.password
+    })
+    ElMessage.success('登录成功')
+    router.push('/admin')
+  } catch (error) {
+    ElMessage.error('登录失败，请检查用户名和密码')
+  } finally {
+    loading.value = false
+  }
+}
+
+function goToChat() {
+  router.push('/')
+}
+</script>
+
 <template>
   <div class="login-container">
-    <el-card class="login-card">
-      <template #header>
-        <div class="card-header">
-          <h1>SimpleClaw 管理后台</h1>
-          <p>请登录以继续</p>
-        </div>
-      </template>
+    <div class="login-background">
+      <div class="gradient-orb orb-1"></div>
+      <div class="gradient-orb orb-2"></div>
+      <div class="gradient-orb orb-3"></div>
+    </div>
 
-      <el-form :model="loginForm" :rules="rules" ref="formRef" @submit.prevent="handleLogin">
-        <el-form-item prop="username">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="logo">
+          <el-icon :size="40" color="var(--color-primary-500)"><ChatDotRound /></el-icon>
+        </div>
+        <h1>SimpleClaw</h1>
+        <p>AI Agent 平台管理后台</p>
+      </div>
+
+      <el-form @submit.prevent="handleLogin" class="login-form">
+        <el-form-item>
           <el-input
-            v-model="loginForm.username"
+            v-model="form.username"
             placeholder="用户名"
-            :prefix-icon="User"
             size="large"
+            :prefix-icon="User"
           />
         </el-form-item>
 
-        <el-form-item prop="password">
+        <el-form-item>
           <el-input
-            v-model="loginForm.password"
-            type="password"
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
             placeholder="密码"
+            size="large"
             :prefix-icon="Lock"
             show-password
-            size="large"
             @keyup.enter="handleLogin"
           />
         </el-form-item>
@@ -34,65 +83,23 @@
           <el-button
             type="primary"
             size="large"
-            class="login-btn"
             :loading="loading"
+            class="login-button"
             @click="handleLogin"
           >
             登录
           </el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+
+      <div class="login-footer">
+        <el-button link type="primary" @click="goToChat">
+          直接进入聊天
+        </el-button>
+      </div>
+    </div>
   </div>
 </template>
-
-<script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
-
-const router = useRouter()
-const authStore = useAuthStore()
-
-const formRef = ref(null)
-const loading = ref(false)
-
-const loginForm = reactive({
-  username: '',
-  password: ''
-})
-
-const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' }
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' }
-  ]
-}
-
-async function handleLogin() {
-  try {
-    await formRef.value.validate()
-  } catch {
-    return
-  }
-
-  loading.value = true
-  
-  try {
-    await authStore.login(loginForm.username, loginForm.password)
-    ElMessage.success('登录成功')
-    router.push('/')
-  } catch (error) {
-    void error
-  } finally {
-    loading.value = false
-  }
-}
-</script>
 
 <style scoped>
 .login-container {
@@ -100,30 +107,115 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+}
+
+.login-background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+}
+
+.orb-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-primary-300);
+  top: -100px;
+  right: -100px;
+}
+
+.orb-2 {
+  width: 300px;
+  height: 300px;
+  background: var(--color-primary-200);
+  bottom: -50px;
+  left: -50px;
+}
+
+.orb-3 {
+  width: 200px;
+  height: 200px;
+  background: var(--color-primary-100);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .login-card {
+  position: relative;
   width: 100%;
   max-width: 400px;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-10);
+  margin: var(--space-4);
 }
 
-.card-header {
+.login-header {
   text-align: center;
+  margin-bottom: var(--space-8);
 }
 
-.card-header h1 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
+.logo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--space-4);
+  background: var(--color-primary-50);
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.card-header p {
+.login-header h1 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.login-header p {
+  color: var(--color-text-secondary);
   margin: 0;
-  color: #909399;
 }
 
-.login-btn {
+.login-form {
+  margin-top: var(--space-6);
+}
+
+.login-form :deep(.el-input__wrapper) {
+  padding: 0 var(--space-4);
+}
+
+.login-button {
   width: 100%;
+  height: 48px;
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+
+[data-theme='dark'] .gradient-orb {
+  opacity: 0.2;
+}
+
+[data-theme='dark'] .logo {
+  background: var(--color-primary-900);
 }
 </style>

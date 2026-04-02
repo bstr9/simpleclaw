@@ -48,6 +48,7 @@ web/dist/
 web/.vite/
 web/package-lock.json
 
-# 嵌入的前端构建产物 (由构建脚本生成)
+# 嵌入的前端构建产物
 pkg/admin/dist/
 pkg/admin/static/
+pkg/channel/web/static/
