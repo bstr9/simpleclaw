@@ -1,5 +1,5 @@
 {
-    "channel_type": "terminal",
+    "channel_type": "web",
     "model": "openai",
     "open_ai_api_key": "YOUR_OPENAI_API_KEY_HERE",
     "open_ai_api_base": "https://chat.uii-ai.com/v1",
@@ -19,6 +19,12 @@
     "expires_in_seconds": 3600,
     "character_desc": "你是一个有用的AI助手。",
     "use_linkai": false,
+    "admin": {
+        "enabled": true,
+        "host": "0.0.0.0",
+        "port": 8081,
+        "username": "admin"
+    },
     "tools": {
         "web": {
             "search": {
