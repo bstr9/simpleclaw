@@ -241,6 +241,11 @@ func startAdminServer(cfg *config.Config) *admin.Server {
 		StaticDir:     adminCfg.StaticDir,
 	}, configPath)
 
+	webPort := 9899
+	if cfg.ChannelType != "" && containsWebChannel(parseChannelTypes(cfg.ChannelType)) {
+		server.SetWebChannelURL(fmt.Sprintf("http://localhost:%d", webPort))
+	}
+
 	go func() {
 		if err := server.Start(); err != nil {
 			logger.Error("Admin Server 启动失败", zap.Error(err))
@@ -252,6 +257,15 @@ func startAdminServer(cfg *config.Config) *admin.Server {
 		zap.Int("port", adminCfg.Port))
 
 	return server
+}
+
+func containsWebChannel(channelTypes []string) bool {
+	for _, ct := range channelTypes {
+		if ct == "web" {
+			return true
+		}
+	}
+	return false
 }
 
 func waitForShutdown(mgr *channel.ChannelManager, extMgr *extension.Manager, apiServer *api.Server, adminServer *admin.Server) {

@@ -2,10 +2,10 @@
 package web
 
 import (
-	"github.com/bstr9/simpleclaw/pkg/common"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bstr9/simpleclaw/pkg/common"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -138,7 +138,7 @@ type ConfigProvider interface {
 
 // MessageHandler 消息处理器接口
 type MessageHandler interface {
-	HandleMessage(ctx context.Context, msg *WebMessage) (*types.Reply, error)
+	HandleMessage(ctx context.Context, msg types.ChatMessage) (*types.Reply, error)
 }
 
 // ResponseData 响应数据结构

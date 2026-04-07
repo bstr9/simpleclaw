@@ -302,6 +302,11 @@ func (e *FeishuExtension) createChannel() (*feishu.FeishuChannel, error) {
 
 	cfg := config.Get()
 
+	if cfg.FeishuAppID == "" || cfg.FeishuAppSecret == "" {
+		logger.Warn("[FeishuExtension] 跳过飞书渠道：缺少 app_id 或 app_secret 配置")
+		return nil, nil
+	}
+
 	feishuConfig := &feishu.Config{
 		AppID:              cfg.FeishuAppID,
 		AppSecret:          cfg.FeishuAppSecret,

@@ -21,16 +21,17 @@ import (
 )
 
 type Server struct {
-	config      *AdminConfig
-	httpServer  *http.Server
-	mux         *http.ServeMux
-	auth        *AuthManager
-	configPath  string
-	startTime   time.Time
-	sessions    map[string]*Session
-	sessionsMu  sync.RWMutex
-	staticFS    fs.FS
-	useEmbedded bool
+	config        *AdminConfig
+	httpServer    *http.Server
+	mux           *http.ServeMux
+	auth          *AuthManager
+	configPath    string
+	startTime     time.Time
+	sessions      map[string]*Session
+	sessionsMu    sync.RWMutex
+	staticFS      fs.FS
+	useEmbedded   bool
+	webChannelURL string
 }
 
 type Session struct {
@@ -82,6 +83,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/test/llm", s.withAuth(s.handleTestLLM))
 	s.mux.HandleFunc("/admin/api/status", s.handleStatus)
 	s.mux.HandleFunc("/admin/api/channels", s.withAuth(s.handleChannels))
+	s.mux.HandleFunc("/admin/api/providers", s.handleProviders)
+	s.mux.HandleFunc("/message", s.proxyToWebChannel)
+	s.mux.HandleFunc("/stream", s.proxyToWebChannel)
+	s.mux.HandleFunc("/upload", s.proxyToWebChannel)
+	s.mux.HandleFunc("/uploads/", s.proxyToWebChannel)
+	s.mux.HandleFunc("/config", s.proxyToWebChannel)
+	s.mux.HandleFunc("/api/", s.proxyToWebChannel)
 	s.mux.HandleFunc("/", s.handleSPA)
 }
 
@@ -646,4 +654,77 @@ func validateConfig(cfg *config.Config) []string {
 	}
 
 	return errors
+}
+
+func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	providers := []map[string]any{
+		{"name": "openai", "label": "OpenAI", "models": []string{"gpt-4", "gpt-4o", "gpt-3.5-turbo"}},
+		{"name": "anthropic", "label": "Anthropic", "models": []string{"claude-3-opus", "claude-3-sonnet", "claude-3-haiku"}},
+		{"name": "zhipu", "label": "智谱AI", "models": []string{"glm-4", "glm-4-plus", "glm-5"}},
+		{"name": "deepseek", "label": "DeepSeek", "models": []string{"deepseek-chat", "deepseek-coder"}},
+		{"name": "qwen", "label": "通义千问", "models": []string{"qwen-max", "qwen-plus", "qwen-turbo"}},
+	}
+
+	writeAPISuccess(w, map[string]any{
+		"providers": providers,
+		"count":     len(providers),
+	})
+}
+
+func (s *Server) proxyToWebChannel(w http.ResponseWriter, r *http.Request) {
+	targetURL := s.webChannelURL
+	if targetURL == "" {
+		targetURL = "http://localhost:9899"
+	}
+
+	proxyReq, err := http.NewRequest(r.Method, targetURL+r.URL.Path+"?"+r.URL.RawQuery, r.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "Failed to create proxy request")
+		return
+	}
+
+	for key, values := range r.Header {
+		for _, value := range values {
+			proxyReq.Header.Add(key, value)
+		}
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "Web channel unavailable: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			w.Write(buf[:n])
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+}
+
+func (s *Server) SetWebChannelURL(url string) {
+	s.webChannelURL = url
 }

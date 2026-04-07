@@ -961,6 +961,7 @@ func (ai *AgentInitializer) createAgent(systemPrompt string, model llm.Model, to
 		agent.WithModel(model),
 		agent.WithTools(toolRegistry.GetAll()),
 		agent.WithMaxSteps(maxSteps),
+		agent.WithStream(true),
 	}
 	return agent.NewAgent(agentOpts...)
 }

@@ -106,6 +106,12 @@ func (e *DingtalkExtension) createChannel() (*dingtalk.DingtalkChannel, error) {
 		return e.channel, nil
 	}
 
+	cfg := config.Get()
+	if cfg.DingtalkClientID == "" || cfg.DingtalkClientSecret == "" {
+		logger.Warn("[DingtalkExtension] 跳过钉钉渠道：缺少 client_id 或 client_secret 配置")
+		return nil, nil
+	}
+
 	e.channel = dingtalk.NewDingtalkChannel(nil)
 	logger.Info("[DingtalkExtension] Channel created")
 	return e.channel, nil

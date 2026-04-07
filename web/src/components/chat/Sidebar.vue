@@ -71,8 +71,7 @@ function formatTime(timestamp: number): string {
     </div>
 
     <div class="sidebar-actions">
-      <el-button type="primary" class="new-chat-btn" @click="createNewChat">
-        <el-icon><Plus /></el-icon>
+      <el-button type="primary" :icon="Plus" class="new-chat-btn" @click="createNewChat">
         新建对话
       </el-button>
     </div>
@@ -114,14 +113,12 @@ function formatTime(timestamp: number): string {
 
     <div class="sidebar-footer">
       <template v-if="authStore.isAuthenticated">
-        <el-button class="footer-btn" @click="goToAdmin">
-          <el-icon><Setting /></el-icon>
+        <el-button :icon="Setting" class="footer-btn" @click="goToAdmin">
           管理后台
         </el-button>
       </template>
       <template v-else>
-        <el-button class="footer-btn" @click="goToLogin">
-          <el-icon><User /></el-icon>
+        <el-button :icon="User" class="footer-btn" @click="goToLogin">
           登录
         </el-button>
       </template>

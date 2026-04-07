@@ -52,3 +52,6 @@ web/package-lock.json
 pkg/admin/dist/
 pkg/admin/static/
 pkg/channel/web/static/
+
+# 第三方参考项目
+thirdparty/

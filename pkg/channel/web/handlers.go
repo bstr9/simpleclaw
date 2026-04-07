@@ -141,6 +141,7 @@ func (w *WebChannel) handleMessage(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if w.messageHandler != nil {
+		logger.Info("[WebChannel] Processing message", zap.String("session_id", sessionID), zap.String("request_id", requestID))
 		go func() {
 			ctx := context.Background()
 			_, err := w.messageHandler.HandleMessage(ctx, msg)
@@ -154,6 +155,8 @@ func (w *WebChannel) handleMessage(rw http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}()
+	} else {
+		logger.Warn("[WebChannel] No message handler set")
 	}
 
 	writeSuccess(rw, map[string]any{
@@ -669,21 +672,89 @@ func (w *WebChannel) makeSSECallback(requestID string) func(event map[string]any
 		}
 
 		eventType, _ := event["type"].(string)
-		data, _ := event["data"].(map[string]any)
 
 		var sseEvent SSEEvent
-		var valid bool
 
 		switch eventType {
-		case "message_update":
-			sseEvent, valid = sseEventFromMessageUpdate(data)
-			if !valid {
+		case "text":
+			delta, _ := event["text"].(string)
+			if delta == "" {
+				delta, _ = event["delta"].(string)
+			}
+			if delta == "" {
+				delta, _ = event["content"].(string)
+			}
+			if delta == "" {
 				return
 			}
-		case "tool_execution_start":
-			sseEvent = sseEventFromToolStart(data)
-		case "tool_execution_end":
-			sseEvent = sseEventFromToolEnd(data)
+			sseEvent = SSEEvent{
+				Type:    "delta",
+				Content: delta,
+			}
+		case "complete":
+			content, _ := event["response"].(string)
+			if content == "" {
+				content, _ = event["content"].(string)
+			}
+			sseEvent = SSEEvent{
+				Type:    "done",
+				Content: content,
+			}
+		case "error":
+			msg, _ := event["message"].(string)
+			if msg == "" {
+				msg, _ = event["error"].(string)
+			}
+			sseEvent = SSEEvent{
+				Type:    "error",
+				Content: msg,
+			}
+		case "tool_call":
+			toolName, _ := event["tool_name"].(string)
+			if toolName == "" {
+				toolName, _ = event["name"].(string)
+			}
+			arguments, _ := event["arguments"].(map[string]any)
+			sseEvent = SSEEvent{
+				Type:      "tool_start",
+				Tool:      toolName,
+				Arguments: arguments,
+			}
+		case "tool_result":
+			toolName, _ := event["tool_name"].(string)
+			if toolName == "" {
+				toolName, _ = event["name"].(string)
+			}
+			result := event["result"]
+			execTime, _ := event["execution_time"].(float64)
+			status, _ := event["status"].(string)
+
+			resultStr := fmt.Sprintf("%v", result)
+			const maxResultLen = 2000
+			if len(resultStr) > maxResultLen {
+				resultStr = resultStr[:maxResultLen] + "…"
+			}
+
+			sseEvent = SSEEvent{
+				Type:          "tool_end",
+				Tool:          toolName,
+				Status:        status,
+				Result:        resultStr,
+				ExecutionTime: execTime,
+			}
+		case "step_start":
+			step, _ := event["step"].(int)
+			sseEvent = SSEEvent{
+				Type:    "step",
+				Content: fmt.Sprintf("Step %d", step),
+			}
+		case "step_end":
+			step, _ := event["step"].(int)
+			status, _ := event["status"].(string)
+			sseEvent = SSEEvent{
+				Type:    "step",
+				Content: fmt.Sprintf("Step %d: %s", step, status),
+			}
 		default:
 			return
 		}

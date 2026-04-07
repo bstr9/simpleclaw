@@ -40,6 +40,13 @@ func WithMaxSteps(maxSteps int) Option {
 	}
 }
 
+// WithStream 设置是否启用流式输出
+func WithStream(stream bool) Option {
+	return func(a *Agent) {
+		a.stream = stream
+	}
+}
+
 // 回调事件类型
 const (
 	EventTypeText       = "text"

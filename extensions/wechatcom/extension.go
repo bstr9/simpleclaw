@@ -106,6 +106,12 @@ func (e *WechatComExtension) createChannel() (*wechatcom.WechatcomChannel, error
 		return e.channel, nil
 	}
 
+	cfg := config.Get()
+	if cfg.WecomCorpID == "" || cfg.WecomSecret == "" {
+		logger.Warn("[WechatComExtension] 跳过企业微信渠道：缺少 corp_id 或 secret 配置")
+		return nil, nil
+	}
+
 	e.channel = wechatcom.NewWechatcomChannel()
 	logger.Info("[WechatComExtension] Channel created")
 	return e.channel, nil

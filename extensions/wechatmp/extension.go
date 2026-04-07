@@ -106,6 +106,12 @@ func (e *WechatMPExtension) createChannel() (*wechatmp.WechatmpChannel, error) {
 		return e.channel, nil
 	}
 
+	cfg := config.Get()
+	if cfg.WechatmpAppID == "" || cfg.WechatmpAppSecret == "" {
+		logger.Warn("[WechatMPExtension] 跳过微信公众号渠道：缺少 app_id 或 app_secret 配置")
+		return nil, nil
+	}
+
 	e.channel = wechatmp.NewWechatmpChannel(nil)
 	logger.Info("[WechatMPExtension] Channel created")
 	return e.channel, nil
