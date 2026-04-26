@@ -258,11 +258,13 @@ func (w *WeixinChannel) GetLoginStatus() LoginStatus {
 }
 
 // GetLoginStatusString 返回当前登录状态的字符串表示
+// 预留接口：供未来微信登录状态监控功能使用
 func (w *WeixinChannel) GetLoginStatusString() string {
 	return string(w.loginStatus)
 }
 
 // GetCurrentQRURL 返回当前二维码 URL
+// 预留接口：供未来微信扫码登录引导功能使用
 func (w *WeixinChannel) GetCurrentQRURL() string {
 	return w.currentQRURL
 }

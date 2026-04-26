@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"plugin"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/bstr9/simpleclaw/pkg/logger"
@@ -236,7 +237,12 @@ func (m *Manager) ShutdownAll(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("shutdown errors: %v", errs)
+		// 构建结构化错误信息，包含每个扩展的失败详情
+		errMsgs := make([]string, 0, len(errs))
+		for _, e := range errs {
+			errMsgs = append(errMsgs, e.Error())
+		}
+		return fmt.Errorf("shutdown errors (%d): %s", len(errs), strings.Join(errMsgs, "; "))
 	}
 
 	return nil

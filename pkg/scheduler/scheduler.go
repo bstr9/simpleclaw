@@ -319,23 +319,27 @@ func (s *Scheduler) runTask(task *Task) {
 }
 
 var globalScheduler *Scheduler
-var globalSchedulerMu sync.Once
-var globalSchedulerSet bool
+var globalSchedulerMu sync.Mutex
+var globalSchedulerOnce sync.Once
 
 // GetScheduler 获取全局调度器
+// 使用 sync.Once 保证只初始化一次，避免并发竞态
 func GetScheduler() *Scheduler {
-	globalSchedulerMu.Do(func() {
-		if !globalSchedulerSet {
+	globalSchedulerOnce.Do(func() {
+		if globalScheduler == nil {
 			globalScheduler = New()
 		}
 	})
+	globalSchedulerMu.Lock()
+	defer globalSchedulerMu.Unlock()
 	return globalScheduler
 }
 
 // SetScheduler 设置全局调度器
 func SetScheduler(s *Scheduler) {
-	globalSchedulerMu.Do(func() {
-		globalScheduler = s
-		globalSchedulerSet = true
-	})
+	globalSchedulerMu.Lock()
+	defer globalSchedulerMu.Unlock()
+	globalScheduler = s
+	// 重置 sync.Once，允许后续 GetScheduler 重新检测
+	globalSchedulerOnce = sync.Once{}
 }

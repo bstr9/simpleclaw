@@ -425,9 +425,8 @@ func (m *Manager) ScanPlugins() []*Metadata {
 
 // PublishEvent 发布事件到所有启用的插件
 func (m *Manager) PublishEvent(event Event, ec *EventContext) error {
-	m.mu.RLock()
+	// ListEnabledPlugins 自带 RLock 保护，无需在此额外加锁
 	plugins := m.ListEnabledPlugins()
-	m.mu.RUnlock()
 
 	for _, p := range plugins {
 		if err := p.OnEvent(event, ec); err != nil {

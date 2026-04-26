@@ -446,6 +446,22 @@ func (s *Server) handleChannelAction(w http.ResponseWriter, r *http.Request) {
 	if ch != nil {
 		// 渠道正在运行，停止它
 		mgr.Stop(channelName)
+
+		// 持久化：从配置中移除该渠道
+		cfg := config.Get()
+		channels := parseChannelTypes(cfg.ChannelType)
+		var newChannels []string
+		for _, c := range channels {
+			if c != channelName {
+				newChannels = append(newChannels, c)
+			}
+		}
+		newChannelType := strings.Join(newChannels, ",")
+		cfg.ChannelType = newChannelType
+		if err := s.saveChannelTypeToConfig(newChannelType); err != nil {
+			logger.Warn("[Admin] 持久化渠道状态失败", zap.Error(err))
+		}
+
 		writeAPISuccess(w, map[string]any{
 			"channel": channelName,
 			"action":  "stopped",
@@ -458,6 +474,26 @@ func (s *Server) handleChannelAction(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusInternalServerError, "启动渠道失败: "+err.Error())
 			return
 		}
+
+		// 持久化：向配置中添加该渠道
+		cfg := config.Get()
+		channels := parseChannelTypes(cfg.ChannelType)
+		found := false
+		for _, c := range channels {
+			if c == channelName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			channels = append(channels, channelName)
+		}
+		newChannelType := strings.Join(channels, ",")
+		cfg.ChannelType = newChannelType
+		if err := s.saveChannelTypeToConfig(newChannelType); err != nil {
+			logger.Warn("[Admin] 持久化渠道状态失败", zap.Error(err))
+		}
+
 		writeAPISuccess(w, map[string]any{
 			"channel": channelName,
 			"action":  "started",
@@ -583,6 +619,35 @@ func (s *Server) saveConfig(newConfig map[string]any) error {
 	return nil
 }
 
+// saveChannelTypeToConfig 持久化渠道类型配置到磁盘
+func (s *Server) saveChannelTypeToConfig(channelType string) error {
+	// 读取当前配置文件
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		return fmt.Errorf("读取配置文件失败: %w", err)
+	}
+
+	var configMap map[string]any
+	if err := json.Unmarshal(data, &configMap); err != nil {
+		return fmt.Errorf("解析配置文件失败: %w", err)
+	}
+
+	// 更新 channel_type 字段
+	configMap["channel_type"] = channelType
+
+	// 写回磁盘
+	if err := s.saveConfig(configMap); err != nil {
+		return fmt.Errorf("保存配置文件失败: %w", err)
+	}
+
+	// 重新加载内存配置
+	if err := config.Reload(s.configPath); err != nil {
+		logger.Warn("[Admin] 重载配置失败", zap.Error(err))
+	}
+
+	return nil
+}
+
 func (s *Server) saveConfigWithAdmin(cfg *config.Config, adminCfg *AdminConfig) error {
 	configMap := map[string]any{
 		"model":              cfg.Model,
@@ -634,23 +699,34 @@ func (s *Server) testLLMConnection(req *TestLLMRequest) *TestLLMResponse {
 	return &TestLLMResponse{Success: true, Model: resp.Model}
 }
 
-// getChannelStatuses 获取渠道运行状态
+// getChannelStatuses 获取所有渠道运行状态
 func (s *Server) getChannelStatuses() []ChannelStatus {
 	cfg := config.Get()
-	channels := parseChannelTypes(cfg.ChannelType)
+	configuredChannels := parseChannelTypes(cfg.ChannelType)
 
 	mgr := channel.GetChannelManager()
-	statuses := make([]ChannelStatus, 0, len(channels))
-	for _, ch := range channels {
+
+	// 所有已注册的渠道类型
+	allChannelTypes := channel.GetRegisteredChannelTypes()
+
+	statuses := make([]ChannelStatus, 0, len(allChannelTypes))
+	for _, chName := range allChannelTypes {
 		running := false
 		if mgr != nil {
-			channelInst := mgr.GetChannel(ch)
+			channelInst := mgr.GetChannel(chName)
 			running = channelInst != nil
 		}
+		enabled := false
+		for _, c := range configuredChannels {
+			if c == chName {
+				enabled = true
+				break
+			}
+		}
 		statuses = append(statuses, ChannelStatus{
-			Name:    ch,
-			Type:    ch,
-			Enabled: true,
+			Name:    chName,
+			Type:    chName,
+			Enabled: enabled,
 			Running: running,
 		})
 	}

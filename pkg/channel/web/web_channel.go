@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/bstr9/simpleclaw/pkg/common"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bstr9/simpleclaw/pkg/channel"
+	"github.com/bstr9/simpleclaw/pkg/common"
 	"github.com/bstr9/simpleclaw/pkg/logger"
 	"github.com/bstr9/simpleclaw/pkg/types"
 	"go.uber.org/zap"
@@ -109,23 +109,7 @@ type WebChannel struct {
 	messageHandler MessageHandler
 
 	// agentBridge Agent桥接器引用
-	agentBridge AgentBridgeInterface
-}
-
-// AgentBridgeInterface Agent桥接器接口
-type AgentBridgeInterface interface {
-	HasVoiceEngine() bool
-	TextToSpeech(ctx context.Context, text string) ([]byte, error)
-	SpeechToText(ctx context.Context, audio []byte) (string, error)
-	ListVoiceEngines() []string
-	HasTranslator() bool
-	Translate(text, from, to string) (string, error)
-	ListTranslators() []string
-	GetMemoryManager() any
-	AddMemory(ctx context.Context, content, userID string, scope any) error
-	SearchMemory(ctx context.Context, query string, limit int) (any, error)
-	GetMemoryStats(ctx context.Context) map[string]any
-	ListPlugins() map[string]any
+	agentBridge channel.AgentBridge
 }
 
 // ConfigProvider 配置提供者接口
@@ -202,8 +186,8 @@ func (w *WebChannel) SetMessageHandler(handler any) {
 }
 
 // SetAgentBridge 设置 Agent 桥接器
-func (w *WebChannel) SetAgentBridge(bridge AgentBridgeInterface) {
-	w.agentBridge = bridge
+func (w *WebChannel) SetAgentBridge(b channel.AgentBridge) {
+	w.agentBridge = b
 }
 
 // Startup 启动 Web 服务

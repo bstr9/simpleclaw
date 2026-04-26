@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bstr9/simpleclaw/pkg/logger"
+	"go.uber.org/zap"
+
 	_ "modernc.org/sqlite"
 )
 

@@ -131,7 +131,15 @@ func run() error {
 	channel.SetChannelManager(mgr)
 	logger.Info("渠道类型", zap.Strings("types", channelTypes))
 
-	if err := mgr.Start(channelTypes, channel.WithFirstStart(true)); err != nil {
+	// 注入 Bridge 依赖：消息处理器和 Agent 桥接器
+	b := bridge.GetBridge()
+	agentBridge := b.GetAgentBridge()
+
+	if err := mgr.Start(channelTypes,
+		channel.WithFirstStart(true),
+		channel.WithMessageProcessor(bridge.NewChannelMessageHandler()),
+		channel.WithAgentBridge(agentBridge),
+	); err != nil {
 		return fmt.Errorf("启动渠道失败: %w", err)
 	}
 

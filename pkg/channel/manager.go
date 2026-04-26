@@ -8,10 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bstr9/simpleclaw/pkg/bridge"
 	"github.com/bstr9/simpleclaw/pkg/logger"
-	"github.com/bstr9/simpleclaw/pkg/plugin"
-	"github.com/bstr9/simpleclaw/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +34,12 @@ type ChannelManager struct {
 	// shutdownSignals 关闭信号
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
+
+	// processor 消息处理器，由 Bridge 层注入
+	processor MessageProcessor
+
+	// agentBridge Agent 桥接器，由 Bridge 层注入
+	agentBridge AgentBridge
 }
 
 // NewChannelManager 创建渠道管理器
@@ -120,9 +123,11 @@ func (m *ChannelManager) ChannelCount() int {
 type StartOption func(*startConfig)
 
 type startConfig struct {
-	firstStart  bool
-	initPlugins bool
-	initCloud   bool
+	firstStart    bool
+	initPlugins   bool
+	initCloud     bool
+	processor     MessageProcessor
+	agentBridge   AgentBridge
 }
 
 // WithFirstStart 设置首次启动标志
@@ -139,12 +144,34 @@ func WithInitPlugins(init bool) StartOption {
 	}
 }
 
+// WithMessageProcessor 设置消息处理器
+func WithMessageProcessor(processor MessageProcessor) StartOption {
+	return func(c *startConfig) {
+		c.processor = processor
+	}
+}
+
+// WithAgentBridge 设置 Agent 桥接器
+func WithAgentBridge(ab AgentBridge) StartOption {
+	return func(c *startConfig) {
+		c.agentBridge = ab
+	}
+}
+
 // Start 启动一个或多个渠道
 // 渠道在独立的 goroutine 中运行
 func (m *ChannelManager) Start(channelNames []string, opts ...StartOption) error {
 	cfg := &startConfig{}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+
+	// 将注入的依赖设置到管理器
+	if cfg.processor != nil {
+		m.processor = cfg.processor
+	}
+	if cfg.agentBridge != nil {
+		m.agentBridge = cfg.agentBridge
 	}
 
 	// 云服务初始化
@@ -287,16 +314,14 @@ func (m *ChannelManager) startChannel(name string, ch Channel) {
 	m.cancelFuncs[name] = cancel
 	m.mu.Unlock()
 
-	// 设置消息处理器连接到 bridge
-	if setter, ok := ch.(MessageHandlerSetter); ok {
-		setter.SetMessageHandler(newBridgeMessageHandler())
+	// 设置消息处理器（通过依赖注入）
+	if setter, ok := ch.(MessageHandlerSetter); ok && m.processor != nil {
+		setter.SetMessageHandler(m.processor)
 	}
 
-	// 设置 Agent 桥接器
-	if setter, ok := ch.(AgentBridgeSetter); ok {
-		if ab := bridge.GetBridge().GetAgentBridge(); ab != nil {
-			setter.SetAgentBridge(ab)
-		}
+	// 设置 Agent 桥接器（通过依赖注入）
+	if setter, ok := ch.(AgentBridgeSetter); ok && m.agentBridge != nil {
+		setter.SetAgentBridge(m.agentBridge)
 	}
 
 	m.wg.Add(1)
@@ -331,129 +356,7 @@ type MessageHandlerSetter interface {
 
 // AgentBridgeSetter 定义设置 Agent 桥接器的接口
 type AgentBridgeSetter interface {
-	SetAgentBridge(bridge any)
-}
-
-// bridgeMessageHandler 连接渠道到 bridge 的消息处理器
-type bridgeMessageHandler struct {
-	useSession bool
-	pluginMgr  *plugin.Manager
-}
-
-func newBridgeMessageHandler() *bridgeMessageHandler {
-	return &bridgeMessageHandler{
-		useSession: true,
-		pluginMgr:  plugin.GetManager(),
-	}
-}
-
-func (h *bridgeMessageHandler) HandleMessage(ctx context.Context, msg types.ChatMessage) (*types.Reply, error) {
-	kwargs := map[string]any{
-		"session_id":   h.getSessionID(msg),
-		"user_id":      msg.GetFromUserID(),
-		"is_group":     msg.IsGroup(),
-		"message_type": msg.GetMsgType(),
-	}
-	if msg.IsGroup() {
-		kwargs["group_id"] = msg.GetGroupID()
-	}
-
-	msgCtx := msg.GetContext()
-	if msgCtx == nil {
-		msgCtx = types.NewContextWithKwargs(types.ContextText, msg.GetContent(), kwargs)
-	} else {
-		for k, v := range kwargs {
-			msgCtx.Set(k, v)
-		}
-	}
-
-	sessionID, _ := kwargs["session_id"].(string)
-
-	var onEvent func(event map[string]any)
-	if webMsg, ok := msg.(interface {
-		GetOnEvent() func(event map[string]any)
-	}); ok {
-		onEvent = webMsg.GetOnEvent()
-	}
-
-	h.emitEvent(plugin.EventOnReceiveMessage, kwargs)
-
-	var reply *types.Reply
-	var err error
-	if onEvent != nil {
-		reply, err = bridge.GetBridge().FetchAgentReply(msg.GetContent(), msgCtx, onEvent)
-	} else {
-		reply, err = bridge.GetBridge().FetchReplyContent(msg.GetContent(), msgCtx)
-	}
-
-	if reply != nil {
-		h.emitEvent(plugin.EventOnSendReply, map[string]any{
-			"session_id": sessionID,
-			"reply_type": reply.Type,
-			"content":    reply.StringContent(),
-		})
-	}
-
-	return reply, err
-}
-
-func (h *bridgeMessageHandler) ProcessMessageWithStream(ctx context.Context, msg interface{}, onEvent func(event map[string]any)) (*types.Reply, error) {
-	chatMsg, ok := msg.(types.ChatMessage)
-	if !ok {
-		return nil, fmt.Errorf("invalid message type")
-	}
-
-	kwargs := map[string]any{
-		"session_id":   h.getSessionID(chatMsg),
-		"user_id":      chatMsg.GetFromUserID(),
-		"is_group":     chatMsg.IsGroup(),
-		"message_type": chatMsg.GetMsgType(),
-	}
-	if chatMsg.IsGroup() {
-		kwargs["group_id"] = chatMsg.GetGroupID()
-	}
-
-	msgCtx := chatMsg.GetContext()
-	if msgCtx == nil {
-		msgCtx = types.NewContextWithKwargs(types.ContextText, chatMsg.GetContent(), kwargs)
-	} else {
-		for k, v := range kwargs {
-			msgCtx.Set(k, v)
-		}
-	}
-
-	h.emitEvent(plugin.EventOnReceiveMessage, kwargs)
-
-	reply, err := bridge.GetBridge().FetchAgentReply(chatMsg.GetContent(), msgCtx, onEvent)
-
-	if reply != nil {
-		sessionID, _ := kwargs["session_id"].(string)
-		h.emitEvent(plugin.EventOnSendReply, map[string]any{
-			"session_id": sessionID,
-			"reply_type": reply.Type,
-			"content":    reply.StringContent(),
-		})
-	}
-
-	return reply, err
-}
-
-func (h *bridgeMessageHandler) getSessionID(msg types.ChatMessage) string {
-	if msg.IsGroup() && msg.GetGroupID() != "" {
-		return "group_" + msg.GetGroupID()
-	}
-	if msg.GetFromUserID() != "" {
-		return "user_" + msg.GetFromUserID()
-	}
-	return ""
-}
-
-func (h *bridgeMessageHandler) emitEvent(event plugin.Event, data map[string]any) {
-	if h.pluginMgr == nil {
-		return
-	}
-	ec := plugin.NewEventContext(event, data)
-	_ = h.pluginMgr.PublishEvent(event, ec)
+	SetAgentBridge(ab AgentBridge)
 }
 
 // Stop 停止渠道

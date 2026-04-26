@@ -14,7 +14,7 @@ relations:
   merged_from: []
   depends_on: [REQ-008]
   refined_by: []
-  related_to: []
+  related_to: [REQ-056, REQ-060]
 versions:
   - version: 1
     date: "2026-04-26T10:00:00"

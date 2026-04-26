@@ -3,91 +3,21 @@ package config
 import "github.com/spf13/viper"
 
 // getDefaultConfig 返回默认配置
+// 通过 viper 反序列化 setDefaults 设置的默认值，确保默认值只维护一处
 func getDefaultConfig() *Config {
-	return &Config{
-		// 核心默认值
-		Model:       "gpt-3.5-turbo",
-		BotType:     "",
-		ChannelType: "",
+	v := viper.New()
+	setDefaults(v)
 
-		// OpenAI 默认值
-		OpenAIAPIBase: "https://api.openai.com/v1",
-
-		// Agent 默认值
-		Agent:                 false,
-		AgentWorkspace:        "~/cow",
-		AgentMaxContextTokens: 50000,
-		AgentMaxContextTurns:  30,
-		AgentMaxSteps:         15,
-
-		// 服务默认值
-		WebPort: 9899,
-		Debug:   false,
-
-		// Claude 默认值
-		ClaudeAPIBase: "https://api.anthropic.com/v1",
-
-		// Gemini 默认值
-		GeminiAPIBase: "https://generativelanguage.googleapis.com",
-
-		// 会话默认值
-		ExpiresInSeconds:      3600,
-		CharacterDesc:         "你是ChatGPT, 一个由OpenAI训练的大型语言模型, 你旨在回答并解决人们的任何问题，并且可以使用多种语言与人交流。",
-		ConversationMaxTokens: 1000,
-
-		// ChatGPT API 参数默认值
-		Temperature:      0.9,
-		TopP:             1.0,
-		FrequencyPenalty: 0,
-		PresencePenalty:  0,
-		RequestTimeout:   180,
-		Timeout:          120,
-
-		// 单聊默认值
-		SingleChatPrefix:      []string{"bot", "@bot"},
-		SingleChatReplyPrefix: "[bot] ",
-
-		// 群聊默认值
-		GroupChatPrefix:    []string{"@bot"},
-		GroupNameWhiteList: []string{"ChatGPT测试群", "ChatGPT测试群2"},
-
-		// 图片生成默认值
-		TextToImage:     "dall-e-2",
-		ImageCreateSize: "256x256",
-		ImageProxy:      true,
-
-		// 语音默认值
-		SpeechRecognition: true,
-		VoiceToText:       "openai",
-		TextToVoice:       "openai",
-		TextToVoiceModel:  "tts-1",
-		TTSVoiceID:        "alloy",
-
-		// 其他平台 API 默认值
-		ZhipuAIAPIBase:  "https://open.bigmodel.cn/api/paas/v4",
-		MoonshotBaseURL: "https://api.moonshot.cn/v1",
-
-		// LinkAI 默认值
-		LinkAIAPIBase: "https://api.link-ai.tech",
-
-	// 飞书默认值
-	FeishuPort:      80,
-	FeishuEventMode: "websocket",
-	LarkCLIPath:     "lark-cli",
-
-		// 微信公众号默认值
-		WechatmpPort: 8080,
-
-		// 插件默认值
-		PluginTriggerPrefix: "$",
-
-	// 清除记忆命令默认值
-	ClearMemoryCommands: []string{"#清除记忆"},
-
-	// Pair 配对系统默认值
-	PairEnabled:         true,
-	PairCleanupInterval: 30,
+	cfg := &Config{}
+	if err := v.Unmarshal(cfg); err != nil {
+		// 如果 Unmarshal 失败，返回硬编码的最低限度默认值
+		return &Config{
+			Model:        "gpt-3.5-turbo",
+			OpenAIAPIBase: "https://api.openai.com/v1",
+			WebPort:      9899,
+		}
 	}
+	return cfg
 }
 
 // setDefaults 设置 viper 默认值
@@ -130,6 +60,9 @@ func setDefaults(v *viper.Viper) {
 
 	// 流式输出配置
 	v.SetDefault("stream_output", true)
+
+	// 安全配置
+	v.SetDefault("sync_to_env", true) // 默认启用以保持向后兼容
 
 	// ChatGPT API 参数
 	v.SetDefault("temperature", 0.9)

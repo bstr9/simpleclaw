@@ -1,6 +1,8 @@
 // Package agent 提供 AI Agent 核心实现
 package agent
 
+import "sync"
+
 // ToolStage 定义工具执行阶段
 type ToolStage int
 
@@ -85,6 +87,7 @@ func (r *ToolResult) IsSuccess() bool {
 
 // ToolRegistry 工具注册表
 type ToolRegistry struct {
+	mu    sync.RWMutex
 	tools map[string]Tool
 }
 
@@ -97,17 +100,23 @@ func NewToolRegistry() *ToolRegistry {
 
 // Register 注册工具
 func (r *ToolRegistry) Register(tool Tool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.tools[tool.Name()] = tool
 }
 
 // Get 获取工具
 func (r *ToolRegistry) Get(name string) (Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	tool, ok := r.tools[name]
 	return tool, ok
 }
 
 // GetAll 获取所有工具
 func (r *ToolRegistry) GetAll() []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	tools := make([]Tool, 0, len(r.tools))
 	for _, tool := range r.tools {
 		tools = append(tools, tool)
@@ -117,21 +126,29 @@ func (r *ToolRegistry) GetAll() []Tool {
 
 // Remove 移除工具
 func (r *ToolRegistry) Remove(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	delete(r.tools, name)
 }
 
 // Clear 清空所有工具
 func (r *ToolRegistry) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.tools = make(map[string]Tool)
 }
 
 // Count 返回工具数量
 func (r *ToolRegistry) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return len(r.tools)
 }
 
 // ToOpenAITools 转换为 OpenAI function calling 格式
 func (r *ToolRegistry) ToOpenAITools() []map[string]any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	tools := make([]map[string]any, 0, len(r.tools))
 	for _, tool := range r.tools {
 		tools = append(tools, map[string]any{

@@ -58,6 +58,11 @@ type Config struct {
 	// 流式输出配置
 	StreamOutput bool `mapstructure:"stream_output"`
 
+	// 安全配置
+	// SyncToEnv 控制是否将 API 密钥同步到环境变量
+	// 默认启用以保持向后兼容，生产环境建议关闭
+	SyncToEnv bool `mapstructure:"sync_to_env"`
+
 	// ChatGPT API 参数
 	Temperature      float64 `mapstructure:"temperature"`
 	TopP             float64 `mapstructure:"top_p"`
@@ -195,20 +200,37 @@ type AdminConfig struct {
 
 // 全局配置实例
 var (
-	cfg     *Config
-	cfgOnce sync.Once
-	cfgMu   sync.RWMutex
+	cfg   *Config
+	cfgMu sync.RWMutex
 )
 
 // Load 从配置文件加载配置
 // configPath: 配置文件路径，默认为 ./config.json
+// 注意：Load 可以多次调用（不同于 sync.Once），
+// 但只有第一次成功加载的配置生效，后续调用会被忽略。
 func Load(configPath ...string) error {
-	var err error
-	cfgOnce.Do(func() {
-		cfg = &Config{}
-		err = loadConfig(cfg, configPath...)
-	})
-	return err
+	cfgMu.RLock()
+	if cfg != nil {
+		cfgMu.RUnlock()
+		return nil
+	}
+	cfgMu.RUnlock()
+
+	// 慢路径：需要加载配置
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
+
+	// 双重检查：可能另一个 goroutine 已经加载
+	if cfg != nil {
+		return nil
+	}
+
+	newCfg := &Config{}
+	if err := loadConfig(newCfg, configPath...); err != nil {
+		return err
+	}
+	cfg = newCfg
+	return nil
 }
 
 // loadConfig 实际加载配置的逻辑
@@ -309,7 +331,14 @@ func bindEnvVars(v *viper.Viper) {
 }
 
 // syncToEnv 同步配置到环境变量（供子进程如 skill 脚本使用）
+// 注意：此功能会将 API 密钥写入环境变量，存在安全风险
+// 可通过配置 sync_to_env: false 关闭
 func syncToEnv(c *Config) {
+	// 默认启用以保持向后兼容
+	if !c.SyncToEnv {
+		return
+	}
+
 	envMappings := map[string]string{
 		"OPENAI_API_KEY":         c.OpenAIAPIKey,
 		"OPENAI_API_BASE":        c.OpenAIAPIBase,
@@ -344,12 +373,19 @@ func syncToEnv(c *Config) {
 // Get 获取全局配置实例（线程安全）
 func Get() *Config {
 	cfgMu.RLock()
-	defer cfgMu.RUnlock()
+	c := cfg
+	cfgMu.RUnlock()
+	if c != nil {
+		return c
+	}
+	// 慢路径：需要初始化默认配置
+	cfgMu.Lock()
 	if cfg == nil {
-		// 自动加载默认配置
 		cfg = getDefaultConfig()
 	}
-	return cfg
+	c = cfg
+	cfgMu.Unlock()
+	return c
 }
 
 // Reload 重新加载配置

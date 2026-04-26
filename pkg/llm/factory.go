@@ -5,6 +5,7 @@ package llm
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // 已知 LLM 提供商常量。
@@ -27,6 +28,9 @@ const (
 	ProviderLinkAI     = "linkai"
 	ProviderXunfei     = "xunfei"
 )
+
+// providerMu 保护 providerBaseURLs 和 providerFactories 的并发访问。
+var providerMu sync.RWMutex
 
 // 已知提供商的基础 URL，便于使用。
 var providerBaseURLs = map[string]string{
@@ -91,6 +95,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		return nil, fmt.Errorf("api_key is required")
 	}
 
+	providerMu.RLock()
+	defer providerMu.RUnlock()
+
 	if cfg.Provider == "" {
 		cfg.Provider = detectProvider(cfg.Model, cfg.APIBase)
 	}
@@ -118,6 +125,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 }
 
 // detectProvider 尝试从模型名称或 API 基础 URL 检测提供商。
+// 调用方必须持有 providerMu 的读锁。
 func detectProvider(model, apiBase string) string {
 	if idx := strings.Index(model, "/"); idx > 0 {
 		provider := strings.ToLower(model[:idx])
@@ -155,17 +163,23 @@ func NewModelWithProvider(provider string, cfg ModelConfig) (Model, error) {
 // RegisterProvider 注册自定义提供商及其基础 URL。
 // 允许扩展工厂以支持新的 OpenAI 兼容提供商。
 func RegisterProvider(name, baseURL string) {
+	providerMu.Lock()
+	defer providerMu.Unlock()
 	providerBaseURLs[strings.ToLower(name)] = baseURL
 }
 
 // GetProviderBaseURL 返回已知提供商的基础 URL。
 // 如果提供商未注册，返回空字符串。
 func GetProviderBaseURL(provider string) string {
+	providerMu.RLock()
+	defer providerMu.RUnlock()
 	return providerBaseURLs[strings.ToLower(provider)]
 }
 
 // ListProviders 返回所有已注册的提供商名称列表。
 func ListProviders() []string {
+	providerMu.RLock()
+	defer providerMu.RUnlock()
 	providers := make([]string, 0, len(providerBaseURLs))
 	for p := range providerBaseURLs {
 		providers = append(providers, p)

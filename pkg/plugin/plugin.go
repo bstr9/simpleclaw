@@ -4,6 +4,7 @@ package plugin
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -304,7 +305,9 @@ func (p *BasePlugin) LoadConfig(globalConfigDir string) (map[string]any, error) 
 		globalConfigPath := filepath.Join(globalConfigDir, p.metadata.Name+".json")
 		if data, err := os.ReadFile(globalConfigPath); err == nil {
 			var config map[string]any
-			if err := json.Unmarshal(data, &config); err == nil {
+			if err := json.Unmarshal(data, &config); err != nil {
+				logger.Warn(fmt.Sprintf("[Plugin:%s] 解析全局配置文件失败 %s: %v", p.metadata.Name, globalConfigPath, err))
+			} else {
 				p.config = config
 				return config, nil
 			}
@@ -316,7 +319,9 @@ func (p *BasePlugin) LoadConfig(globalConfigDir string) (map[string]any, error) 
 		configPath := filepath.Join(p.path, "config.json")
 		if data, err := os.ReadFile(configPath); err == nil {
 			var config map[string]any
-			if err := json.Unmarshal(data, &config); err == nil {
+			if err := json.Unmarshal(data, &config); err != nil {
+				logger.Warn(fmt.Sprintf("[Plugin:%s] 解析插件配置文件失败 %s: %v", p.metadata.Name, configPath, err))
+			} else {
 				p.config = config
 				return config, nil
 			}

@@ -66,6 +66,18 @@ func IsChannelRegistered(name string) bool {
 	return exists
 }
 
+// GetRegisteredChannelTypes 返回所有已注册的渠道类型名称
+func GetRegisteredChannelTypes() []string {
+	channelRegistry.mu.RLock()
+	defer channelRegistry.mu.RUnlock()
+
+	types := make([]string, 0, len(channelRegistry.creators))
+	for name := range channelRegistry.creators {
+		types = append(types, name)
+	}
+	return types
+}
+
 // channelCache 渠道实例缓存
 // 用于存储已创建的渠道实例，支持重启时复用
 var channelCache = struct {

@@ -6,7 +6,7 @@ level: story
 priority: P1
 cluster: bridge
 created_at: "2026-04-26T10:00:00"
-updated_at: "2026-04-26T20:00:00"
+updated_at: "2026-04-26T21:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -16,6 +16,12 @@ relations:
   refined_by: []
   related_to: [REQ-014, REQ-033]
 versions:
+  - version: 5
+    date: "2026-04-26T21:00:00"
+    author: ai
+    context: "残留技术债务清理：移除微信扩展无效 PairManager 集成，WeixinProvider/WeixinChannel 预留接口添加文档"
+    reason: "Oracle 残留债务处理"
+    snapshot: "用户配对系统：微信扩展不再启动 PairManager，WeixinProvider 方法标注为预留接口"
   - version: 4
     date: "2026-04-26T20:00:00"
     author: ai
@@ -78,3 +84,32 @@ source_code:
 2. ~~**微信 Provider 未集成**~~：已修复，`extensions/weixin/extension.go` 完整集成 PairManager + WeixinProvider
 3. ~~**飞书 Provider 重复常量**~~：已修复，改用 `pair.StatusXxx` 包级常量
 4. ~~**无 Pair 配置项**~~：已修复，`pkg/config/config.go` 添加 `PairEnabled`/`PairCleanupInterval` 字段
+
+## 已知限制
+
+### WeixinProvider 为功能桩（Functional Stub）
+
+微信个人号的配对机制与飞书 OAuth 模式本质不同：
+
+- **飞书**：使用 OAuth 设备码认证流程（`lark-cli auth login`），用户需在浏览器中授权，`CheckStatus()` 会真实查询授权状态
+- **微信个人号**：基于扫码登录（QR Code），无 OAuth 授权流程，用户扫码即登录成功，无需额外的配对步骤
+
+因此 `WeixinProvider` 的当前实现为功能桩：
+
+| 方法 | 行为 | 原因 |
+|------|------|------|
+| `CheckStatus(userID)` | 固定返回 `Paired:true, Status:Active` | 微信个人号登录即使用，无需配对验证 |
+| `StartPair(userID)` | 返回空字符串 `""`，无 error | 微信无 OAuth 授权链接可提供 |
+| `IsUserAuthorized(userID)` | 固定返回 `true` | 微信个人号登录后即已授权 |
+| `GetLoginStatus()` | 通过函数注入获取渠道登录状态 | 预留接口，供未来 QR 登录状态查询使用 |
+| `GetCurrentQRURL()` | 通过函数注入获取渠道二维码 URL | 预留接口，供未来 QR 登录流程使用 |
+
+**影响**：
+- 微信渠道的 `PairManager.StartCleanupLoop()` 会持续运行清理循环，但由于所有 `CheckStatus()` 调用均返回 `Paired:true`，`session_pairs` 表中不会有过期数据需要清理，属于资源浪费
+- `SetLoginStatusFunc`/`SetQRURLFunc` 注入已连接但当前未被 Pair 流程调用
+- 微信消息处理流程中未调用 `CheckSessionPair()`（飞书在 `websocket.go:186` 调用），因为微信不需要配对验证
+
+**未来改进方向**：
+1. 微信渠道可跳过 PairManager 初始化，因为 Provider 始终返回已配对状态
+2. 若未来微信接入 OAuth 授权（如微信公众平台），需将 `CheckStatus()` 改为真实查询逻辑
+3. `GetLoginStatus()`/`GetCurrentQRURL()` 可用于构建"微信登录状态监控"功能

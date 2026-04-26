@@ -25,11 +25,15 @@ func (ab *AgentBridge) ClearSession(sessionID string) {
 	}
 
 	if ab.sessionMgr != nil {
-		_ = ab.sessionMgr.DeleteSession(sessionID)
+		if err := ab.sessionMgr.DeleteSession(sessionID); err != nil {
+			logger.Warn("[AgentBridge] 删除会话失败", zap.String("session_id", sessionID), zap.Error(err))
+		}
 	}
 
 	if ab.memoryMgr != nil {
-		_ = ab.memoryMgr.ClearSession(context.Background(), sessionID)
+		if err := ab.memoryMgr.ClearSession(context.Background(), sessionID); err != nil {
+			logger.Warn("[AgentBridge] 清除会话记忆失败", zap.String("session_id", sessionID), zap.Error(err))
+		}
 	}
 }
 
@@ -102,7 +106,9 @@ func (ab *AgentBridge) ClearAllSessions() {
 
 	// 关闭会话管理器
 	if ab.sessionMgr != nil {
-		_ = ab.sessionMgr.Close()
+		if err := ab.sessionMgr.Close(); err != nil {
+			logger.Warn("[AgentBridge] 关闭会话管理器失败", zap.Error(err))
+		}
 	}
 }
 

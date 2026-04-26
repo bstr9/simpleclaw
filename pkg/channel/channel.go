@@ -6,7 +6,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/bstr9/simpleclaw/pkg/logger"
 	"github.com/bstr9/simpleclaw/pkg/types"
+	"go.uber.org/zap"
 )
 
 // Channel 定义消息渠道接口
@@ -174,12 +176,19 @@ func (b *BaseChannel) Stop() error {
 	return nil
 }
 
-// Send 基础发送实现（需要子类实现）
+// Send 基础发送实现（需要子类覆盖实现）
+// 如果子类未覆盖，消息将被静默丢弃并记录警告
 func (b *BaseChannel) Send(reply *types.Reply, ctx *types.Context) error {
+	logger.Warn("[Channel] Send 未实现，消息被丢弃",
+		zap.String("channel_type", b.channelType),
+		zap.String("reply_type", reply.Type.String()))
 	return nil
 }
 
-// Startup 基础启动实现（需要子类实现）
+// Startup 基础启动实现（需要子类覆盖实现）
+// 如果子类未覆盖，启动将直接成功但不执行任何操作
 func (b *BaseChannel) Startup(ctx context.Context) error {
+	logger.Warn("[Channel] Startup 未实现，使用空启动",
+		zap.String("channel_type", b.channelType))
 	return nil
 }

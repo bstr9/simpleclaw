@@ -6,14 +6,14 @@ level: epic
 priority: P0
 cluster: channels
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-25T19:01:52"
+updated_at: "2026-04-26T14:11:47"
 relations:
   supersedes: []
   conflicts_with: []
   refines: []
   merged_from: []
   depends_on: []
-  refined_by: [REQ-014, REQ-015, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-050, REQ-053]
+  refined_by: [REQ-014, REQ-015, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-050, REQ-053, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075]
   related_to: [REQ-005, REQ-007]
 versions:
   - version: 1
@@ -36,6 +36,12 @@ versions:
     snapshot: "多渠道接入系统，Terminal 渠道由 REQ-050 覆盖"
   - version: 4
     date: "2026-04-25T19:01:52"
+    author: ai
+    context: "元数据自动同步"
+    reason: "自动补充反向关系: refined_by"
+    snapshot: "自动同步元数据"
+  - version: 5
+    date: "2026-04-26T14:11:47"
     author: ai
     context: "元数据自动同步"
     reason: "自动补充反向关系: refined_by"

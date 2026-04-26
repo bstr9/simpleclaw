@@ -993,17 +993,14 @@ func (w *WebChannel) handlePlugins(rw http.ResponseWriter, r *http.Request) {
 
 	plugins := []map[string]any{}
 	if w.agentBridge != nil {
-		list := w.agentBridge.ListPlugins()
-		for name, metaAny := range list {
-			if meta, ok := metaAny.(map[string]any); ok {
-				plugins = append(plugins, map[string]any{
-					"name":        name,
-					"version":     meta["version"],
-					"enabled":     meta["enabled"],
-					"description": meta["description"],
-					"priority":    meta["priority"],
-				})
-			}
+		for name, meta := range w.agentBridge.ListPlugins() {
+			plugins = append(plugins, map[string]any{
+				"name":        name,
+				"version":     meta.Version,
+				"enabled":     meta.Enabled,
+				"description": meta.Description,
+				"priority":    meta.Priority,
+			})
 		}
 	}
 
@@ -1038,7 +1035,9 @@ func (w *WebChannel) handleVoiceInfo(rw http.ResponseWriter, r *http.Request) {
 	engines := []string{}
 	if w.agentBridge != nil {
 		enabled = w.agentBridge.HasVoiceEngine()
-		engines = w.agentBridge.ListVoiceEngines()
+		for _, et := range w.agentBridge.ListVoiceEngines() {
+			engines = append(engines, string(et))
+		}
 	}
 
 	writeSuccess(rw, map[string]any{
