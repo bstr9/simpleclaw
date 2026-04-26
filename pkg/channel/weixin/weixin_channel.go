@@ -1,5 +1,5 @@
 // Package weixin 提供微信个人号渠道实现
-// 本包实现了 ilink bot 协议用于微信通信
+// 本包实现了 ilink bot 协议用于微信通信（支持多账号）
 package weixin
 
 import (
@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,45 +26,13 @@ import (
 )
 
 const (
-	// 默认 API 端点
-	defaultBaseURL    = "https://ilinkai.weixin.qq.com"
-	defaultCDNBaseURL = "https://novac2c.cdn.weixin.qq.com/c2c"
-
-	// 超时设置
-	defaultLongPollTimeout = 35 * time.Second
-	defaultAPITimeout      = 15 * time.Second
+	// QR 登录与重试设置（仅在本文件使用）
 	qrLoginTimeout         = 480 * time.Second
 	maxQRRefreshes         = 10
-
-	// 错误码
-	sessionExpiredErrCode = -14
-
-	// 重试设置
+	sessionExpiredErrCode  = -14
 	maxConsecutiveFailures = 3
 	backoffDelay           = 30 * time.Second
 	retryDelay             = 2 * time.Second
-
-	// 消息限制
-	textChunkLimit = 4000
-
-	// 消息类型
-	messageTypeUser = 1 // 用户消息
-	messageTypeBot  = 2 // 机器人消息
-
-	// 消息项类型
-	itemText  = 1
-	itemImage = 2
-	itemVoice = 3
-	itemFile  = 4
-	itemVideo = 5
-
-	// CDN 媒体类型
-	mediaTypeImage = 1
-	mediaTypeVideo = 2
-	mediaTypeFile  = 3
-
-	// 日志前缀
-	logPrefix = "[Weixin]"
 )
 
 // LoginStatus 表示当前登录状态
@@ -80,10 +47,12 @@ const (
 
 // Config 微信渠道配置
 type Config struct {
-	BaseURL         string `json:"base_url"`
-	CDNBaseURL      string `json:"cdn_base_url"`
-	Token           string `json:"token"`
-	CredentialsPath string `json:"credentials_path"`
+	BaseURL               string `json:"base_url"`
+	CDNBaseURL            string `json:"cdn_base_url"`
+	Token                 string `json:"token"`
+	CredentialsPath       string `json:"credentials_path"`
+	MarkdownFilterEnabled *bool  `json:"markdown_filter_enabled"` // nil=默认启用
+	SessionPauseMinutes   int    `json:"session_pause_minutes"`   // 会话暂停时长（分钟），0=默认
 }
 
 // Credentials 存储的登录凭证
@@ -94,36 +63,43 @@ type Credentials struct {
 	UserID  string `json:"user_id"`
 }
 
-// WeixinChannel 实现微信个人号渠道
+// WeixinChannel 实现微信个人号渠道（支持多账号）
 type WeixinChannel struct {
 	*channel.BaseChannel
 
 	config *Config
-	api    *weixinAPI
-	client *http.Client
 
-	// 登录状态
-	loginStatus  LoginStatus
-	currentQRURL string
-	credentials  *Credentials
+	// 多账号管理
+	accounts   map[string]*accountState // 账号ID→账号状态
+	accountsMu sync.RWMutex             // 账号映射读写锁
 
-	// 轮询状态
-	stopChan      chan struct{}
-	pollWg        sync.WaitGroup
-	getUpdatesBuf string
+	// 共享资源
+	client   *http.Client // HTTP 客户端（所有账号共享）
+	stateDir string       // 状态目录路径（~/.weixin）
 
-	// 消息发送的上下文令牌
-	contextTokens map[string]string
-	contextMu     sync.RWMutex
+	// 持久化存储
+	syncBufStore      *SyncBufStore     // 同步游标存储
+	contextTokenStore *ContextTokenStore // 上下文令牌存储
 
-	// 消息去重
-	receivedMsgs *expiredMap
+	// 会话暂停守卫
+	sessionGuard *SessionGuard
 
-	// 媒体文件临时目录
-	tmpDir string
+	// Markdown 过滤器
+	markdownFilter *MarkdownFilter
+
+	// Typing 缓存
+	typingCache *TypingTicketCache
 
 	// 消息处理器
 	messageHandler MessageHandler
+
+	// 全局停止信号
+	stopChan chan struct{}
+	stopWg   sync.WaitGroup
+
+	// 登录状态（兼容旧接口）
+	loginStatus  LoginStatus
+	currentQRURL string
 }
 
 // MessageHandler 消息处理器接口
@@ -154,11 +130,12 @@ func (w *WeixinChannel) SetMessageHandlerFunc(handler func(ctx context.Context, 
 // NewWeixinChannel 创建新的微信渠道实例
 func NewWeixinChannel() *WeixinChannel {
 	return &WeixinChannel{
-		BaseChannel:   channel.NewBaseChannel("weixin"),
-		loginStatus:   LoginStatusIdle,
-		stopChan:      make(chan struct{}),
-		contextTokens: make(map[string]string),
-		receivedMsgs:  newExpiredMap(7*time.Hour + 6*time.Minute),
+		BaseChannel:    channel.NewBaseChannel("weixin"),
+		accounts:       make(map[string]*accountState),
+		loginStatus:    LoginStatusIdle,
+		stopChan:       make(chan struct{}),
+		markdownFilter: NewMarkdownFilter(true), // 默认启用
+		typingCache:    NewTypingTicketCache(),
 	}
 }
 
@@ -167,7 +144,7 @@ func (w *WeixinChannel) Startup(ctx context.Context) error {
 	// 初始化配置
 	w.initConfig()
 
-	// 设置 HTTP 客户端
+	// 设置 HTTP 客户端（共享）
 	w.client = &http.Client{
 		Timeout: defaultAPITimeout,
 		Transport: &http.Transport{
@@ -175,31 +152,52 @@ func (w *WeixinChannel) Startup(ctx context.Context) error {
 		},
 	}
 
-	// 设置临时目录
-	w.setupTmpDir()
+	// 设置状态目录
+	w.stateDir = resolveStateDir()
 
-	// 加载凭证或执行二维码登录
-	token, baseURL := w.loadCredentials()
-	if token == "" {
-		var err error
-		token, baseURL, err = w.performQRLogin(ctx)
-		if err != nil {
-			return fmt.Errorf("QR login failed: %w", err)
+	// 初始化持久化存储
+	accountsDir := resolveAccountsDir()
+	w.syncBufStore = NewSyncBufStore(accountsDir)
+	w.contextTokenStore = NewContextTokenStore(accountsDir)
+
+	// 迁移旧版凭证（如果存在）
+	if w.config.CredentialsPath != "" {
+		migrateLegacyCredentials(w.config.CredentialsPath, w.stateDir)
+	}
+
+	// 加载已有账号
+	accountIDs := listAccountIDs(w.stateDir)
+
+	if len(accountIDs) == 0 {
+		// 无已有账号，执行 QR 登录创建第一个账号
+		if err := w.addAccountWithQRLogin(ctx, ""); err != nil {
+			return fmt.Errorf("首次 QR 登录失败: %w", err)
+		}
+	} else {
+		// 启动所有已有账号
+		for _, accountID := range accountIDs {
+			if err := w.startExistingAccount(accountID); err != nil {
+				logger.Warn(logPrefix+" 启动账号失败，跳过",
+					zap.String("account_id", accountID),
+					zap.Error(err))
+				continue
+			}
 		}
 	}
 
-	// 初始化 API 客户端
-	w.api = newWeixinAPI(baseURL, token, w.config.CDNBaseURL, w.client)
-	w.loginStatus = LoginStatusLoggedIn
+	// 检查是否有至少一个活跃账号
+	w.accountsMu.RLock()
+	activeCount := len(w.accounts)
+	w.accountsMu.RUnlock()
 
-	logger.Info(logPrefix+" Channel started successfully",
-		zap.String("credentials_path", w.config.CredentialsPath))
+	if activeCount == 0 {
+		return fmt.Errorf("没有可用的微信账号")
+	}
+
+	logger.Info(logPrefix+" 渠道启动成功",
+		zap.Int("account_count", activeCount))
 
 	w.ReportStartupSuccess()
-
-	// 启动轮询循环
-	go w.pollLoop()
-
 	return nil
 }
 
@@ -207,7 +205,29 @@ func (w *WeixinChannel) Startup(ctx context.Context) error {
 func (w *WeixinChannel) Stop() error {
 	logger.Info(logPrefix + " Stop() called")
 	close(w.stopChan)
-	w.pollWg.Wait()
+
+	// 停止所有账号的轮询
+	w.accountsMu.RLock()
+	for _, as := range w.accounts {
+		close(as.stopChan)
+	}
+	w.accountsMu.RUnlock()
+
+	// 等待所有轮询 goroutine 退出
+	w.accountsMu.RLock()
+	for _, as := range w.accounts {
+		as.pollWg.Wait()
+	}
+	w.accountsMu.RUnlock()
+
+	// 保存所有账号的持久化数据
+	w.accountsMu.RLock()
+	for id, as := range w.accounts {
+		w.syncBufStore.Save(id, as.getUpdatesBuf)
+		w.contextTokenStore.Save(id, as.contextTokens)
+	}
+	w.accountsMu.RUnlock()
+
 	w.SetStarted(false)
 	return w.BaseChannel.Stop()
 }
@@ -225,30 +245,51 @@ func (w *WeixinChannel) Send(reply *types.Reply, ctx *types.Context) error {
 	}
 
 	if receiver == "" {
-		logger.Error(logPrefix + " No receiver found in context")
+		logger.Error(logPrefix + " 上下文中未找到接收者")
 		return fmt.Errorf("no receiver in context")
 	}
 
-	contextToken := w.getContextToken(receiver, ctx)
-	if contextToken == "" {
-		logger.Error(logPrefix+" No context_token for receiver",
+	// 检查会话是否暂停
+	accountID, _ := ctx.GetString("account_id")
+	if accountID != "" {
+		if err := w.sessionGuard.AssertActive(accountID); err != nil {
+			logger.Warn(logPrefix+" 发送被阻止：会话已暂停",
+				zap.String("account_id", accountID),
+				zap.Error(err))
+			return err
+		}
+	}
+
+	// 查找接收者对应的账号
+	as := w.findAccountForReceiver(receiver, accountID)
+	if as == nil {
+		logger.Error(logPrefix+" 未找到接收者对应的账号",
 			zap.String("receiver", receiver))
-		return fmt.Errorf("no context_token for receiver")
+		return fmt.Errorf("no account for receiver: %s", receiver)
+	}
+
+	// 获取 contextToken
+	contextToken := w.getContextTokenForAccount(as, receiver, ctx)
+	if contextToken == "" {
+		logger.Error(logPrefix+" 未找到接收者的 contextToken",
+			zap.String("receiver", receiver),
+			zap.String("account_id", as.id))
+		return fmt.Errorf("no context_token for receiver: %s", receiver)
 	}
 
 	switch reply.Type {
 	case types.ReplyText, types.ReplyText_:
-		return w.sendText(reply.StringContent(), receiver, contextToken)
+		text := w.markdownFilter.Filter(reply.StringContent())
+		return w.sendText(as, text, receiver, contextToken)
 	case types.ReplyImage, types.ReplyImageURL:
-		return w.sendImage(reply.StringContent(), receiver, contextToken)
+		return w.sendImage(as, reply.StringContent(), receiver, contextToken)
 	case types.ReplyFile:
-		return w.sendFile(reply.StringContent(), receiver, contextToken)
+		return w.sendFile(as, reply.StringContent(), receiver, contextToken)
 	case types.ReplyVideo, types.ReplyVideoURL:
-		return w.sendVideo(reply.StringContent(), receiver, contextToken)
+		return w.sendVideo(as, reply.StringContent(), receiver, contextToken)
 	default:
-		logger.Warn(logPrefix+" Unsupported reply type, fallback to text",
-			zap.String("type", reply.Type.String()))
-		return w.sendText(reply.StringContent(), receiver, contextToken)
+		text := w.markdownFilter.Filter(reply.StringContent())
+		return w.sendText(as, text, receiver, contextToken)
 	}
 }
 
@@ -284,67 +325,107 @@ func (w *WeixinChannel) initConfig() {
 		home, _ := os.UserHomeDir()
 		w.config.CredentialsPath = filepath.Join(home, ".weixin_cow_credentials.json")
 	}
+	// 根据 MarkdownFilterEnabled 配置更新过滤器
+	if w.config.MarkdownFilterEnabled != nil {
+		w.markdownFilter = NewMarkdownFilter(*w.config.MarkdownFilterEnabled)
+	}
+	// 根据 SessionPauseMinutes 配置更新会话暂停时长
+	if w.config.SessionPauseMinutes > 0 {
+		w.sessionGuard = NewSessionGuard(w.config.SessionPauseMinutes)
+	}
 }
 
-// setupTmpDir 创建媒体文件临时目录
-func (w *WeixinChannel) setupTmpDir() {
-	home, _ := os.UserHomeDir()
-	w.tmpDir = filepath.Join(home, "cow", "tmp")
-	os.MkdirAll(w.tmpDir, 0755)
-}
+// --- 多账号管理 ---
 
-// loadCredentials 从文件加载存储的凭证
-func (w *WeixinChannel) loadCredentials() (token, baseURL string) {
-	data, err := os.ReadFile(w.config.CredentialsPath)
-	if err != nil {
-		return "", ""
+// findAccountForReceiver 根据接收者查找对应的账号
+// 如果指定了 accountID 则直接使用，否则遍历所有账号查找
+func (w *WeixinChannel) findAccountForReceiver(receiver, accountID string) *accountState {
+	w.accountsMu.RLock()
+	defer w.accountsMu.RUnlock()
+
+	// 指定了账号 ID，直接查找
+	if accountID != "" {
+		return w.accounts[accountID]
 	}
 
-	var creds Credentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		logger.Warn(logPrefix+" Failed to parse credentials file", zap.Error(err))
-		return "", ""
+	// 遍历所有账号，查找拥有该接收者 contextToken 的账号
+	for _, as := range w.accounts {
+		as.contextMu.RLock()
+		_, exists := as.contextTokens[receiver]
+		as.contextMu.RUnlock()
+		if exists {
+			return as
+		}
 	}
 
-	w.credentials = &creds
-	if creds.BaseURL != "" {
-		return creds.Token, creds.BaseURL
+	// 兜底：返回第一个可用账号
+	for _, as := range w.accounts {
+		return as
 	}
-	return creds.Token, w.config.BaseURL
-}
-
-// saveCredentials 保存凭证到文件
-func (w *WeixinChannel) saveCredentials(creds *Credentials) error {
-	w.credentials = creds
-	data, err := json.MarshalIndent(creds, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	// 确保目录存在
-	dir := filepath.Dir(w.config.CredentialsPath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(w.config.CredentialsPath, data, 0600); err != nil {
-		return err
-	}
-
-	logger.Info(logPrefix+" Credentials saved", zap.String("path", w.config.CredentialsPath))
 	return nil
 }
 
-// performQRLogin 执行交互式二维码登录
-func (w *WeixinChannel) performQRLogin(ctx context.Context) (token, baseURL string, err error) {
-	logger.Info(logPrefix + " Starting QR login...")
+// getContextTokenForAccount 从指定账号获取接收者的 contextToken
+func (w *WeixinChannel) getContextTokenForAccount(as *accountState, receiver string, ctx *types.Context) string {
+	// 首先检查消息是否有上下文令牌
+	if msg, ok := ctx.Get("msg"); ok {
+		if wxMsg, ok := msg.(*WeixinMessage); ok && wxMsg.contextToken != "" {
+			return wxMsg.contextToken
+		}
+	}
+	as.contextMu.RLock()
+	defer as.contextMu.RUnlock()
+	return as.contextTokens[receiver]
+}
+
+// startExistingAccount 启动已有凭证的账号
+func (w *WeixinChannel) startExistingAccount(accountID string) error {
+	creds, err := loadAccountCredential(w.stateDir, accountID)
+	if err != nil {
+		return fmt.Errorf("加载凭证失败: %w", err)
+	}
+
+	baseURL := creds.BaseURL
+	if baseURL == "" {
+		baseURL = w.config.BaseURL
+	}
+
+	as := w.newAccountState(normalizeAccountID(accountID))
+	as.credentials = creds
+	as.api = newWeixinAPI(baseURL, creds.Token, w.config.CDNBaseURL, w.client)
+	as.loginStatus = LoginStatusLoggedIn
+
+	// 从持久化存储加载同步游标和 contextToken
+	as.getUpdatesBuf = w.syncBufStore.Load(as.id)
+	as.contextTokens = w.contextTokenStore.Load(as.id)
+
+	// 设置临时目录
+	home, _ := os.UserHomeDir()
+	as.tmpDir = filepath.Join(home, "cow", "tmp", as.id)
+	os.MkdirAll(as.tmpDir, 0755)
+
+	// 注册账号
+	w.accountsMu.Lock()
+	w.accounts[as.id] = as
+	w.accountsMu.Unlock()
+
+	// 启动轮询
+	go w.pollLoop(as)
+
+	logger.Info(logPrefix+" 账号已启动",
+		zap.String("account_id", as.id))
+	return nil
+}
+
+// addAccountWithQRLogin 通过 QR 登录添加新账号
+// label 用于标识账号（为空则自动生成）
+func (w *WeixinChannel) addAccountWithQRLogin(ctx context.Context, label string) error {
 	w.loginStatus = LoginStatusWaiting
 
 	api := newWeixinAPI(w.config.BaseURL, "", w.config.CDNBaseURL, w.client)
-
 	qrcode, _, err := w.fetchInitialQRCode(ctx, api)
 	if err != nil {
-		return "", "", err
+		return err
 	}
 
 	deadline := time.Now().Add(qrLoginTimeout)
@@ -353,44 +434,109 @@ func (w *WeixinChannel) performQRLogin(ctx context.Context) (token, baseURL stri
 
 	for {
 		if w.isLoginCancelled(ctx) {
-			logger.Info(logPrefix + " QR login cancelled")
-			return "", "", fmt.Errorf("login cancelled")
+			return fmt.Errorf("登录取消")
 		}
-
 		if time.Now().After(deadline) {
-			logger.Warn(logPrefix + " QR login timed out")
-			return "", "", fmt.Errorf("QR login timed out")
+			return fmt.Errorf("QR 登录超时")
 		}
 
 		statusResp, err := api.pollQRStatus(ctx, qrcode)
 		if err != nil {
-			logger.Error(logPrefix+" QR status poll error", zap.Error(err))
-			return "", "", err
+			return err
 		}
 
-		action, newQRCode, _ := w.handleQRStatus(statusResp, &refreshCount, &scannedPrinted, api, ctx)
+		action, data1, _ := w.handleQRStatus(statusResp, &refreshCount, &scannedPrinted, api, ctx)
 		switch action {
 		case qrActionContinue:
 			time.Sleep(1 * time.Second)
-			continue
 		case qrActionRefresh:
-			qrcode = newQRCode
+			qrcode = data1
 			time.Sleep(1 * time.Second)
-			continue
+		case qrActionRedirect:
+			// IDC 重定向已由 handleQRStatus 更新 api.baseURL
+			// 继续用新的 base URL 轮询
+			time.Sleep(1 * time.Second)
 		case qrActionSuccess:
-			return statusResp.BotToken, newQRCode, nil
+			// handleQRConfirmed 已保存凭证到多账号目录
+			// 现在创建 accountState 并启动轮询
+			accountID := statusResp.UserID
+			if accountID == "" {
+				accountID = "default"
+			}
+			normalizedID := normalizeAccountID(accountID)
+
+			// 清理同 userId 的旧账号
+			clearStaleAccountsForUserId(w.stateDir, normalizedID, accountID, func(staleID string) {
+				// 停止旧账号的轮询
+				w.accountsMu.Lock()
+				if old, ok := w.accounts[staleID]; ok {
+					close(old.stopChan)
+					old.pollWg.Wait()
+					delete(w.accounts, staleID)
+				}
+				w.accountsMu.Unlock()
+			})
+
+			// 注册新账号
+			registerAccountID(w.stateDir, normalizedID)
+
+			// 创建并启动
+			as := w.newAccountState(normalizedID)
+			baseURL := data1 // data1 是 baseURL（来自 handleQRConfirmed）
+			if baseURL == "" {
+				baseURL = w.config.BaseURL
+			}
+			as.api = newWeixinAPI(baseURL, statusResp.BotToken, w.config.CDNBaseURL, w.client)
+			as.credentials = &Credentials{
+				Token:   statusResp.BotToken,
+				BaseURL: baseURL,
+				BotID:   statusResp.BotID,
+				UserID:  accountID,
+			}
+			as.loginStatus = LoginStatusLoggedIn
+			home, _ := os.UserHomeDir()
+			as.tmpDir = filepath.Join(home, "cow", "tmp", as.id)
+			os.MkdirAll(as.tmpDir, 0755)
+
+			w.accountsMu.Lock()
+			w.accounts[as.id] = as
+			w.accountsMu.Unlock()
+
+			go w.pollLoop(as)
+
+			w.loginStatus = LoginStatusLoggedIn
+			w.currentQRURL = ""
+
+			logger.Info(logPrefix+" 新账号登录成功",
+				zap.String("account_id", as.id))
+			return nil
 		case qrActionError:
-			return "", "", fmt.Errorf("%s", newQRCode)
+			return fmt.Errorf("%s", data1)
 		}
 	}
 }
 
+// newAccountState 创建新的账号状态实例
+func (w *WeixinChannel) newAccountState(id string) *accountState {
+	return &accountState{
+		id:            id,
+		loginStatus:   LoginStatusIdle,
+		stopChan:      make(chan struct{}),
+		contextTokens: make(map[string]string),
+		receivedMsgs:  newExpiredMap(7*time.Hour + 6*time.Minute),
+	}
+}
+
+// --- QR 登录 ---
+
+// qrAction 二维码状态处理动作
 type qrAction int
 
 const (
 	qrActionContinue qrAction = iota
 	qrActionRefresh
 	qrActionSuccess
+	qrActionRedirect // IDC 重定向
 	qrActionError
 )
 
@@ -398,15 +544,15 @@ const (
 func (w *WeixinChannel) fetchInitialQRCode(ctx context.Context, api *weixinAPI) (qrcode, qrURL string, err error) {
 	qrResp, err := api.fetchQRCode(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to fetch QR code: %w", err)
+		return "", "", fmt.Errorf("获取二维码失败: %w", err)
 	}
 
 	if qrResp.QRCode == "" {
-		return "", "", fmt.Errorf("no QR code returned from server")
+		return "", "", fmt.Errorf("服务器未返回二维码")
 	}
 
 	w.currentQRURL = qrResp.QRImageContent
-	logger.Info(logPrefix+" QR code generated", zap.String("url", qrResp.QRImageContent))
+	logger.Info(logPrefix+" 二维码已生成", zap.String("url", qrResp.QRImageContent))
 	w.printQRCode(qrResp.QRImageContent)
 
 	return qrResp.QRCode, qrResp.QRImageContent, nil
@@ -432,10 +578,22 @@ func (w *WeixinChannel) handleQRStatus(statusResp *qrStatusResponse, refreshCoun
 	case "scaned":
 		w.loginStatus = LoginStatusScanned
 		if !*scannedPrinted {
-			logger.Info(logPrefix + " QR code scanned, waiting for confirmation...")
+			logger.Info(logPrefix + " 二维码已扫描，等待确认...")
 			*scannedPrinted = true
 		}
 		return qrActionContinue, "", ""
+	case "scaned_but_redirect":
+		redirectHost := statusResp.RedirectHost
+		if redirectHost != "" {
+			newBaseURL := "https://" + redirectHost
+			api.updateBaseURL(newBaseURL)
+			logger.Info(logPrefix+" IDC 重定向，切换到新节点",
+				zap.String("redirect_host", redirectHost),
+				zap.String("new_base_url", newBaseURL))
+		} else {
+			logger.Warn(logPrefix + " 收到 scaned_but_redirect 但缺少 redirect_host，继续使用当前节点")
+		}
+		return qrActionRedirect, "", ""
 	case "expired":
 		return w.handleQRExpired(refreshCount, scannedPrinted, api, ctx)
 	case "confirmed":
@@ -448,9 +606,9 @@ func (w *WeixinChannel) handleQRStatus(statusResp *qrStatusResponse, refreshCoun
 func (w *WeixinChannel) handleQRExpired(refreshCount *int, scannedPrinted *bool, api *weixinAPI, ctx context.Context) (action qrAction, qrcode, qrURL string) {
 	*refreshCount++
 	if *refreshCount >= maxQRRefreshes {
-		return qrActionError, fmt.Sprintf("QR code expired after %d refreshes", maxQRRefreshes), ""
+		return qrActionError, fmt.Sprintf("二维码在 %d 次刷新后仍过期", maxQRRefreshes), ""
 	}
-	logger.Info(logPrefix+" QR code expired, refreshing...",
+	logger.Info(logPrefix+" 二维码已过期，刷新中...",
 		zap.Int("attempt", *refreshCount))
 
 	qrResp, err := api.fetchQRCode(ctx)
@@ -468,25 +626,36 @@ func (w *WeixinChannel) handleQRExpired(refreshCount *int, scannedPrinted *bool,
 // handleQRConfirmed 处理登录确认
 func (w *WeixinChannel) handleQRConfirmed(statusResp *qrStatusResponse) (action qrAction, baseURL, _ string) {
 	if statusResp.BotToken == "" || statusResp.BotID == "" {
-		return qrActionError, "login confirmed but missing token/bot_id", ""
+		return qrActionError, "登录已确认但缺少 token/bot_id", ""
 	}
 
 	w.currentQRURL = ""
 	w.loginStatus = LoginStatusLoggedIn
-	logger.Info(logPrefix+" Login successful", zap.String("bot_id", statusResp.BotID))
+	logger.Info(logPrefix+" 登录成功", zap.String("bot_id", statusResp.BotID))
 
 	resultBaseURL := statusResp.BaseURL
 	if resultBaseURL == "" {
 		resultBaseURL = w.config.BaseURL
 	}
 
+	// 保存凭证到多账号目录
+	accountID := statusResp.UserID
+	if accountID == "" {
+		accountID = "default"
+	}
+	normalizedID := normalizeAccountID(accountID)
+
 	creds := &Credentials{
 		Token:   statusResp.BotToken,
 		BaseURL: resultBaseURL,
 		BotID:   statusResp.BotID,
-		UserID:  statusResp.UserID,
+		UserID:  accountID,
 	}
-	w.saveCredentials(creds)
+
+	// 保存到多账号凭证路径
+	if err := saveAccountCredential(w.stateDir, normalizedID, creds); err != nil {
+		logger.Warn(logPrefix+" 保存凭证失败", zap.Error(err))
+	}
 
 	return qrActionSuccess, resultBaseURL, ""
 }
@@ -494,64 +663,77 @@ func (w *WeixinChannel) handleQRConfirmed(statusResp *qrStatusResponse) (action 
 // printQRCode 打印二维码到终端
 func (w *WeixinChannel) printQRCode(qrURL string) {
 	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("  Please scan QR code with WeChat (expires in ~2 minutes)")
+	fmt.Println("  请使用微信扫描二维码（约 2 分钟内过期）")
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("  QR Code URL: %s\n\n", qrURL)
+	fmt.Printf("  二维码地址: %s\n\n", qrURL)
 }
 
-// pollLoop 运行主长轮询循环
-func (w *WeixinChannel) pollLoop() {
-	w.pollWg.Add(1)
-	defer w.pollWg.Done()
+// --- 轮询循环 ---
 
-	logger.Info(logPrefix + " Starting long-poll loop")
+// pollLoop 运行指定账号的长轮询循环
+func (w *WeixinChannel) pollLoop(as *accountState) {
+	w.stopWg.Add(1)
+	as.pollWg.Add(1)
+	defer w.stopWg.Done()
+	defer as.pollWg.Done()
+
+	logger.Info(logPrefix+" 启动长轮询",
+		zap.String("account_id", as.id))
 	consecutiveFailures := 0
 
 	for {
-		if w.isStopped() {
-			logger.Info(logPrefix + " Long-poll loop ended")
+		select {
+		case <-w.stopChan:
 			return
+		case <-as.stopChan:
+			return
+		default:
 		}
 
-		resp, err := w.api.getUpdates(w.getUpdatesBuf)
+		resp, err := as.api.getUpdates(as.getUpdatesBuf)
 		if err != nil {
-			consecutiveFailures = w.handlePollError(err, consecutiveFailures)
+			consecutiveFailures = w.handlePollError(err, consecutiveFailures, as)
 			continue
 		}
 
 		if w.isSessionExpired(resp) {
-			consecutiveFailures = w.handleSessionExpired(consecutiveFailures)
+			consecutiveFailures = w.handleSessionExpired(consecutiveFailures, as)
 			continue
 		}
 
 		if w.hasAPIError(resp) {
-			consecutiveFailures = w.handleAPIError(resp, consecutiveFailures)
+			consecutiveFailures = w.handleAPIError(resp, consecutiveFailures, as)
 			continue
 		}
 
 		consecutiveFailures = 0
-		w.updateSyncCursor(resp)
+		w.updateSyncCursor(resp, as)
+
+		// 检查 IDC 重定向
+		if resp.BaseURL != "" && resp.BaseURL != as.api.baseURL {
+			logger.Info(logPrefix+" getUpdates 返回新 base URL，切换 IDC",
+				zap.String("account_id", as.id),
+				zap.String("old_base_url", as.api.baseURL),
+				zap.String("new_base_url", resp.BaseURL))
+			as.api.updateBaseURL(resp.BaseURL)
+			// 持久化新 URL
+			as.credentials.BaseURL = resp.BaseURL
+			if err := saveAccountCredential(w.stateDir, as.id, as.credentials); err != nil {
+				logger.Warn(logPrefix+" 保存重定向 URL 失败", zap.Error(err))
+			}
+		}
 
 		for _, rawMsg := range resp.Messages {
-			w.processMessage(rawMsg)
+			w.processMessage(rawMsg, as)
 		}
 	}
 }
 
-// isStopped 检查是否已停止
-func (w *WeixinChannel) isStopped() bool {
-	select {
-	case <-w.stopChan:
-		return true
-	default:
-		return false
-	}
-}
-
 // handlePollError 处理轮询错误
-func (w *WeixinChannel) handlePollError(err error, consecutiveFailures int) int {
+func (w *WeixinChannel) handlePollError(err error, consecutiveFailures int, as *accountState) int {
 	consecutiveFailures++
-	logger.Error(logPrefix+" getUpdates error",
+	logger.Error(logPrefix+" getUpdates 错误",
+		zap.String("account_id", as.id),
 		zap.Error(err),
 		zap.Int("consecutive_failures", consecutiveFailures))
 
@@ -565,16 +747,45 @@ func (w *WeixinChannel) isSessionExpired(resp *updatesResponse) bool {
 }
 
 // handleSessionExpired 处理会话过期
-func (w *WeixinChannel) handleSessionExpired(consecutiveFailures int) int {
-	logger.Error(logPrefix + " Session expired, attempting re-login...")
-	if w.relogin() {
-		logger.Info(logPrefix + " Re-login successful, resuming poll")
-		w.getUpdatesBuf = ""
-		return 0
+// 优先暂停等待恢复，连续暂停超过阈值后触发重新登录
+func (w *WeixinChannel) handleSessionExpired(consecutiveFailures int, as *accountState) int {
+	// 检查是否应该触发重新登录
+	if w.sessionGuard.ShouldRelogin(as.id) {
+		logger.Error(logPrefix+" 连续暂停次数过多，尝试重新登录...",
+			zap.String("account_id", as.id))
+		if w.relogin(as) {
+			logger.Info(logPrefix+" 重新登录成功，恢复轮询",
+				zap.String("account_id", as.id))
+			w.sessionGuard.ClearPause(as.id)
+			as.getUpdatesBuf = ""
+			return 0
+		}
+		logger.Error(logPrefix+" 重新登录失败，5 分钟后重试",
+			zap.String("account_id", as.id))
+		time.Sleep(5 * time.Minute)
+		return consecutiveFailures
 	}
-	logger.Error(logPrefix + " Re-login failed, will retry in 5 minutes")
-	time.Sleep(5 * time.Minute)
-	return consecutiveFailures
+
+	// 暂停会话，等待自动恢复
+	w.sessionGuard.Pause(as.id)
+	remaining := w.sessionGuard.GetRemainingPause(as.id)
+
+	logger.Warn(logPrefix+" 会话已过期，暂停等待恢复",
+		zap.String("account_id", as.id),
+		zap.Duration("pause_duration", remaining))
+
+	// 可中断的等待
+	select {
+	case <-w.stopChan:
+		return consecutiveFailures
+	case <-as.stopChan:
+		return consecutiveFailures
+	case <-time.After(remaining):
+		logger.Info(logPrefix+" 暂停到期，恢复轮询",
+			zap.String("account_id", as.id))
+	}
+
+	return 0
 }
 
 // hasAPIError 检查是否有 API 错误
@@ -583,9 +794,10 @@ func (w *WeixinChannel) hasAPIError(resp *updatesResponse) bool {
 }
 
 // handleAPIError 处理 API 错误
-func (w *WeixinChannel) handleAPIError(resp *updatesResponse, consecutiveFailures int) int {
+func (w *WeixinChannel) handleAPIError(resp *updatesResponse, consecutiveFailures int, as *accountState) int {
 	consecutiveFailures++
-	logger.Error(logPrefix+" getUpdates API error",
+	logger.Error(logPrefix+" getUpdates API 错误",
+		zap.String("account_id", as.id),
 		zap.Int("ret", resp.Ret),
 		zap.Int("errcode", resp.ErrCode),
 		zap.String("errmsg", resp.ErrMsg))
@@ -602,41 +814,104 @@ func (w *WeixinChannel) applyRetryDelay(consecutiveFailures int) {
 	}
 }
 
-// updateSyncCursor 更新同步游标
-func (w *WeixinChannel) updateSyncCursor(resp *updatesResponse) {
+// updateSyncCursor 更新同步游标并持久化
+func (w *WeixinChannel) updateSyncCursor(resp *updatesResponse, as *accountState) {
 	if resp.GetUpdatesBuf != "" {
-		w.getUpdatesBuf = resp.GetUpdatesBuf
+		as.getUpdatesBuf = resp.GetUpdatesBuf
+		// 异步持久化同步游标
+		go w.syncBufStore.Save(as.id, as.getUpdatesBuf)
 	}
 }
 
-// relogin 尝试在会话过期后重新登录
-func (w *WeixinChannel) relogin() bool {
-	// 删除凭证文件
-	os.Remove(w.config.CredentialsPath)
+// relogin 尝试在会话过期后重新登录指定账号
+func (w *WeixinChannel) relogin(as *accountState) bool {
+	// 删除账号凭证文件
+	removeAccountCredential(w.stateDir, as.id)
 
-	w.loginStatus = LoginStatusWaiting
+	as.loginStatus = LoginStatusWaiting
 	ctx, cancel := context.WithTimeout(context.Background(), qrLoginTimeout)
 	defer cancel()
 
-	token, baseURL, err := w.performQRLogin(ctx)
+	api := newWeixinAPI(w.config.BaseURL, "", w.config.CDNBaseURL, w.client)
+	qrcode, _, err := w.fetchInitialQRCode(ctx, api)
 	if err != nil {
-		w.loginStatus = LoginStatusIdle
+		as.loginStatus = LoginStatusIdle
 		return false
 	}
 
-	w.api = newWeixinAPI(baseURL, token, w.config.CDNBaseURL, w.client)
-	w.loginStatus = LoginStatusLoggedIn
+	deadline := time.Now().Add(qrLoginTimeout)
+	refreshCount := 0
+	scannedPrinted := false
 
-	// 清除上下文令牌
-	w.contextMu.Lock()
-	w.contextTokens = make(map[string]string)
-	w.contextMu.Unlock()
+	for {
+		if w.isLoginCancelled(ctx) {
+			as.loginStatus = LoginStatusIdle
+			return false
+		}
+		if time.Now().After(deadline) {
+			as.loginStatus = LoginStatusIdle
+			return false
+		}
 
-	return true
+		statusResp, err := api.pollQRStatus(ctx, qrcode)
+		if err != nil {
+			as.loginStatus = LoginStatusIdle
+			return false
+		}
+
+		action, data1, _ := w.handleQRStatus(statusResp, &refreshCount, &scannedPrinted, api, ctx)
+		switch action {
+		case qrActionContinue:
+			time.Sleep(1 * time.Second)
+		case qrActionRefresh:
+			qrcode = data1
+			time.Sleep(1 * time.Second)
+		case qrActionRedirect:
+			// IDC 重定向已更新 api.baseURL
+			time.Sleep(1 * time.Second)
+		case qrActionSuccess:
+			baseURL := data1
+			if baseURL == "" {
+				baseURL = w.config.BaseURL
+			}
+			as.api = newWeixinAPI(baseURL, statusResp.BotToken, w.config.CDNBaseURL, w.client)
+			as.loginStatus = LoginStatusLoggedIn
+
+			// 保存新凭证
+			accountID := statusResp.UserID
+			if accountID == "" {
+				accountID = "default"
+			}
+			normalizedID := normalizeAccountID(accountID)
+			creds := &Credentials{
+				Token:   statusResp.BotToken,
+				BaseURL: baseURL,
+				BotID:   statusResp.BotID,
+				UserID:  accountID,
+			}
+			saveAccountCredential(w.stateDir, normalizedID, creds)
+			as.credentials = creds
+
+			// 清除上下文令牌
+			as.contextMu.Lock()
+			as.contextTokens = make(map[string]string)
+			as.contextMu.Unlock()
+
+			// 清除暂停状态
+			w.sessionGuard.ClearPause(as.id)
+
+			return true
+		case qrActionError:
+			as.loginStatus = LoginStatusIdle
+			return false
+		}
+	}
 }
 
+// --- 消息处理 ---
+
 // processMessage 处理单条传入消息
-func (w *WeixinChannel) processMessage(rawMsg map[string]any) {
+func (w *WeixinChannel) processMessage(rawMsg map[string]any, as *accountState) {
 	// 只处理用户消息 (type=1)
 	msgType, _ := rawMsg["message_type"].(float64)
 	if int(msgType) != messageTypeUser {
@@ -648,35 +923,44 @@ func (w *WeixinChannel) processMessage(rawMsg map[string]any) {
 	if msgID == "" || msgID == "0" {
 		msgID = fmt.Sprintf("%v", rawMsg["seq"])
 	}
-	if w.receivedMsgs.Exists(msgID) {
+	if as.receivedMsgs.Exists(msgID) {
 		return
 	}
-	w.receivedMsgs.Set(msgID, true)
+	as.receivedMsgs.Set(msgID, true)
 
 	fromUser, _ := rawMsg["from_user_id"].(string)
 	contextToken, _ := rawMsg["context_token"].(string)
 
 	// 存储上下文令牌
 	if contextToken != "" && fromUser != "" {
-		w.contextMu.Lock()
-		w.contextTokens[fromUser] = contextToken
-		w.contextMu.Unlock()
+		as.contextMu.Lock()
+		as.contextTokens[fromUser] = contextToken
+		as.contextMu.Unlock()
+		// 异步持久化 contextToken
+		go w.contextTokenStore.Save(as.id, as.contextTokens)
 	}
 
 	// 解析消息
-	wxMsg := parseWeixinMessage(rawMsg, w.config.CDNBaseURL, w.tmpDir)
+	wxMsg := parseWeixinMessage(rawMsg, w.config.CDNBaseURL, as.tmpDir)
 	if wxMsg == nil {
 		return
 	}
 
-	logger.Info(logPrefix+" Received message",
+	logger.Info(logPrefix+" 收到消息",
+		zap.String("account_id", as.id),
 		zap.String("from", fromUser),
 		zap.String("type", wxMsg.ctype.String()),
 		zap.String("content", truncateString(wxMsg.content, 50)))
 
-	// 调用消息处理器
+	// 调用消息处理器（带 typing 指示器）
 	if w.messageHandler != nil {
 		ctx := context.Background()
+
+		// 启动 typing 指示器
+		typingCtrl := NewTypingController(as.api, w.typingCache)
+		stopTyping := typingCtrl.StartTyping(fromUser, contextToken)
+		defer stopTyping()
+
 		reply, err := w.messageHandler.HandleMessage(ctx, wxMsg)
 		if err != nil {
 			logger.Error(logPrefix+" 消息处理错误", zap.Error(err))
@@ -687,6 +971,7 @@ func (w *WeixinChannel) processMessage(rawMsg map[string]any) {
 			replyCtx := types.NewContext(wxMsg.ctype, wxMsg.content)
 			replyCtx.Set("receiver", fromUser)
 			replyCtx.Set("msg", wxMsg)
+			replyCtx.Set("account_id", as.id)
 
 			if err := w.Send(reply, replyCtx); err != nil {
 				logger.Error(logPrefix+" 发送回复失败", zap.Error(err))
@@ -695,32 +980,19 @@ func (w *WeixinChannel) processMessage(rawMsg map[string]any) {
 	}
 }
 
-// getContextToken 获取接收者的上下文令牌
-func (w *WeixinChannel) getContextToken(receiver string, ctx *types.Context) string {
-	// 首先检查消息是否有上下文令牌
-	if msg, ok := ctx.Get("msg"); ok {
-		if wxMsg, ok := msg.(*WeixinMessage); ok && wxMsg.contextToken != "" {
-			return wxMsg.contextToken
-		}
-	}
+// --- 消息发送方法 ---
 
-	w.contextMu.RLock()
-	defer w.contextMu.RUnlock()
-	return w.contextTokens[receiver]
-}
-
-// 消息发送方法
-
-func (w *WeixinChannel) sendText(text, receiver, contextToken string) error {
+// sendText 发送文本消息
+func (w *WeixinChannel) sendText(as *accountState, text, receiver, contextToken string) error {
 	if len(text) <= textChunkLimit {
-		return w.api.sendText(receiver, text, contextToken)
+		return as.api.sendText(receiver, text, contextToken)
 	}
 
 	// 分割长文本
 	chunks := splitText(text, textChunkLimit)
 	for i, chunk := range chunks {
-		if err := w.api.sendText(receiver, chunk, contextToken); err != nil {
-			return fmt.Errorf("failed to send chunk %d/%d: %w", i+1, len(chunks), err)
+		if err := as.api.sendText(receiver, chunk, contextToken); err != nil {
+			return fmt.Errorf("发送分片 %d/%d 失败: %w", i+1, len(chunks), err)
 		}
 		if i < len(chunks)-1 {
 			time.Sleep(500 * time.Millisecond)
@@ -729,76 +1001,79 @@ func (w *WeixinChannel) sendText(text, receiver, contextToken string) error {
 	return nil
 }
 
-func (w *WeixinChannel) sendImage(pathOrURL, receiver, contextToken string) error {
-	localPath, err := w.resolveMediaPath(pathOrURL)
+// sendImage 发送图片消息
+func (w *WeixinChannel) sendImage(as *accountState, pathOrURL, receiver, contextToken string) error {
+	localPath, err := w.resolveMediaPath(pathOrURL, as)
 	if err != nil {
-		w.sendText("[Image send failed: file not found]", receiver, contextToken)
+		w.sendText(as, "[图片发送失败：文件未找到]", receiver, contextToken)
 		return err
 	}
 
-	result, err := uploadMediaToCDN(w.api, localPath, receiver, mediaTypeImage)
+	result, err := uploadMediaToCDN(as.api, localPath, receiver, mediaTypeImage)
 	if err != nil {
-		w.sendText("[Image send failed]", receiver, contextToken)
+		w.sendText(as, "[图片发送失败]", receiver, contextToken)
 		return err
 	}
 
-	return w.api.sendImageItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, result.CiphertextSize)
+	return as.api.sendImageItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, result.CiphertextSize)
 }
 
-func (w *WeixinChannel) sendFile(pathOrURL, receiver, contextToken string) error {
-	localPath, err := w.resolveMediaPath(pathOrURL)
+// sendFile 发送文件消息
+func (w *WeixinChannel) sendFile(as *accountState, pathOrURL, receiver, contextToken string) error {
+	localPath, err := w.resolveMediaPath(pathOrURL, as)
 	if err != nil {
-		w.sendText("[File send failed: file not found]", receiver, contextToken)
+		w.sendText(as, "[文件发送失败：文件未找到]", receiver, contextToken)
 		return err
 	}
 
-	result, err := uploadMediaToCDN(w.api, localPath, receiver, mediaTypeFile)
+	result, err := uploadMediaToCDN(as.api, localPath, receiver, mediaTypeFile)
 	if err != nil {
-		w.sendText("[File send failed]", receiver, contextToken)
+		w.sendText(as, "[文件发送失败]", receiver, contextToken)
 		return err
 	}
 
 	fileName := filepath.Base(localPath)
-	return w.api.sendFileItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, fileName, result.RawSize)
+	return as.api.sendFileItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, fileName, result.RawSize)
 }
 
-func (w *WeixinChannel) sendVideo(pathOrURL, receiver, contextToken string) error {
-	localPath, err := w.resolveMediaPath(pathOrURL)
+// sendVideo 发送视频消息
+func (w *WeixinChannel) sendVideo(as *accountState, pathOrURL, receiver, contextToken string) error {
+	localPath, err := w.resolveMediaPath(pathOrURL, as)
 	if err != nil {
-		w.sendText("[Video send failed: file not found]", receiver, contextToken)
+		w.sendText(as, "[视频发送失败：文件未找到]", receiver, contextToken)
 		return err
 	}
 
-	result, err := uploadMediaToCDN(w.api, localPath, receiver, mediaTypeVideo)
+	result, err := uploadMediaToCDN(as.api, localPath, receiver, mediaTypeVideo)
 	if err != nil {
-		w.sendText("[Video send failed]", receiver, contextToken)
+		w.sendText(as, "[视频发送失败]", receiver, contextToken)
 		return err
 	}
 
-	return w.api.sendVideoItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, result.CiphertextSize)
+	return as.api.sendVideoItem(receiver, contextToken, result.EncryptQueryParam, result.AESKeyB64, result.CiphertextSize)
 }
 
 // resolveMediaPath 将文件路径或 URL 解析为本地路径，如需要则下载
-func (w *WeixinChannel) resolveMediaPath(pathOrURL string) (string, error) {
+func (w *WeixinChannel) resolveMediaPath(pathOrURL string, as *accountState) (string, error) {
 	if pathOrURL == "" {
-		return "", fmt.Errorf("empty path")
+		return "", fmt.Errorf("路径为空")
 	}
 
 	localPath := strings.TrimPrefix(pathOrURL, "file://")
 
 	if strings.HasPrefix(localPath, "http://") || strings.HasPrefix(localPath, "https://") {
-		return w.downloadMedia(localPath)
+		return w.downloadMedia(localPath, as)
 	}
 
 	if _, err := os.Stat(localPath); err != nil {
-		return "", fmt.Errorf("file not found: %s", localPath)
+		return "", fmt.Errorf("文件未找到: %s", localPath)
 	}
 
 	return localPath, nil
 }
 
-// downloadMedia 从 URL 下载文件到临时目录
-func (w *WeixinChannel) downloadMedia(urlStr string) (string, error) {
+// downloadMedia 从 URL 下载文件到账号的临时目录
+func (w *WeixinChannel) downloadMedia(urlStr string, as *accountState) (string, error) {
 	resp, err := w.client.Get(urlStr)
 	if err != nil {
 		return "", err
@@ -806,7 +1081,7 @@ func (w *WeixinChannel) downloadMedia(urlStr string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download failed: %s", resp.Status)
+		return "", fmt.Errorf("下载失败: %s", resp.Status)
 	}
 
 	// 根据内容类型确定扩展名
@@ -831,7 +1106,7 @@ func (w *WeixinChannel) downloadMedia(urlStr string) (string, error) {
 	randBytes := make([]byte, 4)
 	rand.Read(randBytes)
 	filename := fmt.Sprintf("wx_media_%s%s", hex.EncodeToString(randBytes), ext)
-	savePath := filepath.Join(w.tmpDir, filename)
+	savePath := filepath.Join(as.tmpDir, filename)
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -845,8 +1120,9 @@ func (w *WeixinChannel) downloadMedia(urlStr string) (string, error) {
 	return savePath, nil
 }
 
-// 辅助函数
+// --- 辅助函数 ---
 
+// truncateString 截断字符串到指定长度
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -854,6 +1130,7 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
+// splitText 将文本按指定长度分割
 func splitText(text string, limit int) []string {
 	if len(text) <= limit {
 		return []string{text}
@@ -882,7 +1159,9 @@ func splitText(text string, limit int) []string {
 	return chunks
 }
 
-// expiredMap 提供带过期时间的简单映射（简化实现）
+// --- 消息去重 ---
+
+// expiredMap 提供带过期时间的简单映射
 type expiredMap struct {
 	mu    sync.RWMutex
 	items map[string]*expiredItem
@@ -943,265 +1222,7 @@ func (m *expiredMap) cleanup() {
 	}
 }
 
-// weixinAPI 实现 ilink bot HTTP API
-type weixinAPI struct {
-	baseURL    string
-	token      string
-	cdnBaseURL string
-	client     *http.Client
-}
-
-func newWeixinAPI(baseURL, token, cdnBaseURL string, client *http.Client) *weixinAPI {
-	if cdnBaseURL == "" {
-		cdnBaseURL = defaultCDNBaseURL
-	}
-	return &weixinAPI{
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		token:      token,
-		cdnBaseURL: cdnBaseURL,
-		client:     client,
-	}
-}
-
-func (a *weixinAPI) buildHeaders() map[string]string {
-	// 生成随机微信 UIN
-	val := make([]byte, 4)
-	rand.Read(val)
-	uinVal := uint32(val[0])<<24 | uint32(val[1])<<16 | uint32(val[2])<<8 | uint32(val[3])
-	uin := base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "%d", uinVal))
-
-	headers := map[string]string{
-		common.HeaderContentType: common.ContentTypeJSON,
-		"AuthorizationType":      "ilink_bot_token",
-		"X-WECHAT-UIN":           uin,
-	}
-	if a.token != "" {
-		headers["Authorization"] = common.AuthPrefixBearer + a.token
-	}
-	return headers
-}
-
-type qrCodeResponse struct {
-	QRCode         string `json:"qrcode"`
-	QRImageContent string `json:"qrcode_img_content"`
-}
-
-type qrStatusResponse struct {
-	Status   string `json:"status"`
-	BotToken string `json:"bot_token"`
-	BotID    string `json:"ilink_bot_id"`
-	BaseURL  string `json:"baseurl"`
-	UserID   string `json:"ilink_user_id"`
-}
-
-type updatesResponse struct {
-	Ret           int              `json:"ret"`
-	ErrCode       int              `json:"errcode"`
-	ErrMsg        string           `json:"errmsg"`
-	GetUpdatesBuf string           `json:"get_updates_buf"`
-	Messages      []map[string]any `json:"msgs"`
-}
-
-type uploadURLResponse struct {
-	UploadParam string `json:"upload_param"`
-}
-
-func (a *weixinAPI) fetchQRCode(ctx context.Context) (*qrCodeResponse, error) {
-	url := fmt.Sprintf("%s/ilink/bot/get_bot_qrcode?bot_type=3", a.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result qrCodeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
-}
-
-func (a *weixinAPI) pollQRStatus(ctx context.Context, qrcode string) (*qrStatusResponse, error) {
-	escaped := url.QueryEscape(qrcode)
-	urlStr := fmt.Sprintf("%s/ilink/bot/get_qrcode_status?qrcode=%s", a.baseURL, escaped)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("iLink-App-ClientVersion", "1")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result qrStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
-}
-
-func (a *weixinAPI) getUpdates(buf string) (*updatesResponse, error) {
-	body := map[string]any{"get_updates_buf": buf}
-	var result updatesResponse
-	if err := a.post("ilink/bot/getupdates", body, &result, int(defaultLongPollTimeout.Seconds())+5); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *weixinAPI) sendText(to, text, contextToken string) error {
-	body := map[string]any{
-		"msg": map[string]any{
-			"from_user_id":  "",
-			"to_user_id":    to,
-			"client_id":     generateClientID(),
-			"message_type":  messageTypeBot,
-			"message_state": 2, // FINISH
-			"item_list": []map[string]any{
-				{"type": itemText, "text_item": map[string]any{"text": text}},
-			},
-			"context_token": contextToken,
-		},
-	}
-	return a.post("ilink/bot/sendmessage", body, nil, 0)
-}
-
-func (a *weixinAPI) sendImageItem(to, contextToken, encryptParam, aesKeyB64 string, ciphertextSize int) error {
-	items := []map[string]any{
-		{
-			"type": itemImage,
-			"image_item": map[string]any{
-				"media": map[string]any{
-					"encrypt_query_param": encryptParam,
-					"aes_key":             aesKeyB64,
-					"encrypt_type":        1,
-				},
-				"mid_size": ciphertextSize,
-			},
-		},
-	}
-	return a.sendItems(to, contextToken, items)
-}
-
-func (a *weixinAPI) sendFileItem(to, contextToken, encryptParam, aesKeyB64, fileName string, fileSize int) error {
-	items := []map[string]any{
-		{
-			"type": itemFile,
-			"file_item": map[string]any{
-				"media": map[string]any{
-					"encrypt_query_param": encryptParam,
-					"aes_key":             aesKeyB64,
-					"encrypt_type":        1,
-				},
-				"file_name": fileName,
-				"len":       fmt.Sprintf("%d", fileSize),
-			},
-		},
-	}
-	return a.sendItems(to, contextToken, items)
-}
-
-func (a *weixinAPI) sendVideoItem(to, contextToken, encryptParam, aesKeyB64 string, ciphertextSize int) error {
-	items := []map[string]any{
-		{
-			"type": itemVideo,
-			"video_item": map[string]any{
-				"media": map[string]any{
-					"encrypt_query_param": encryptParam,
-					"aes_key":             aesKeyB64,
-					"encrypt_type":        1,
-				},
-				"video_size": ciphertextSize,
-			},
-		},
-	}
-	return a.sendItems(to, contextToken, items)
-}
-
-func (a *weixinAPI) sendItems(to, contextToken string, items []map[string]any) error {
-	body := map[string]any{
-		"msg": map[string]any{
-			"from_user_id":  "",
-			"to_user_id":    to,
-			"client_id":     generateClientID(),
-			"message_type":  messageTypeBot,
-			"message_state": 2,
-			"item_list":     items,
-			"context_token": contextToken,
-		},
-	}
-	return a.post("ilink/bot/sendmessage", body, nil, 0)
-}
-
-func (a *weixinAPI) getUploadURL(fileKey string, mediaType int, toUserID string, rawSize int, rawMD5 string, fileSize int, aesKey string) (*uploadURLResponse, error) {
-	body := map[string]any{
-		"filekey":       fileKey,
-		"media_type":    mediaType,
-		"to_user_id":    toUserID,
-		"rawsize":       rawSize,
-		"rawfilemd5":    rawMD5,
-		"filesize":      fileSize,
-		"aeskey":        aesKey,
-		"no_need_thumb": true,
-	}
-	var result uploadURLResponse
-	if err := a.post("ilink/bot/getuploadurl", body, &result, 0); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (a *weixinAPI) post(endpoint string, body any, result any, timeoutSec int) error {
-	url := a.baseURL + "/" + endpoint
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return err
-	}
-
-	for k, v := range a.buildHeaders() {
-		req.Header.Set(k, v)
-	}
-
-	client := a.client
-	if timeoutSec > 0 {
-		client = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if result != nil {
-		return json.NewDecoder(resp.Body).Decode(result)
-	}
-
-	return nil
-}
-
-func generateClientID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
+// --- CDN 上传 ---
 
 // CDNUploadResult 保存 CDN 媒体上传结果
 type CDNUploadResult struct {
@@ -1240,7 +1261,7 @@ func uploadMediaToCDN(api *weixinAPI, filePath, toUserID string, mediaType int) 
 	}
 
 	if uploadResp.UploadParam == "" {
-		return nil, fmt.Errorf("no upload_param returned")
+		return nil, fmt.Errorf("未返回 upload_param")
 	}
 
 	// 加密数据
@@ -1269,12 +1290,12 @@ func uploadMediaToCDN(api *weixinAPI, filePath, toUserID string, mediaType int) 
 			body, _ := io.ReadAll(cdnResp.Body)
 			errMsg = string(body[:min(200, len(body))])
 		}
-		return nil, fmt.Errorf("CDN error %d: %s", cdnResp.StatusCode, errMsg)
+		return nil, fmt.Errorf("CDN 错误 %d: %s", cdnResp.StatusCode, errMsg)
 	}
 
 	downloadParam := cdnResp.Header.Get("x-encrypted-param")
 	if downloadParam == "" {
-		return nil, fmt.Errorf("CDN response missing x-encrypted-param")
+		return nil, fmt.Errorf("CDN 响应缺少 x-encrypted-param")
 	}
 
 	aesKeyB64 := base64.StdEncoding.EncodeToString([]byte(aesKeyHex))
