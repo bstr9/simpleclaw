@@ -33,6 +33,11 @@ type WeixinMessage struct {
 	prepareFunc  func()
 }
 
+// GetFromUserID 返回消息发送者 ID
+func (m *WeixinMessage) GetFromUserID() string {
+	return m.FromUserID
+}
+
 // GetContextToken 返回用于回复的上下文令牌
 func (m *WeixinMessage) GetContextToken() string {
 	return m.contextToken
