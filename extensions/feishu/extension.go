@@ -109,8 +109,11 @@ func (e *FeishuExtension) Startup(ctx context.Context) error {
 	logger.Info("[FeishuExtension] Starting extension")
 
 	// 初始化 PairManager
-	if err := e.initPairManager(); err != nil {
-		logger.Warn("[FeishuExtension] PairManager 初始化失败", zap.Error(err))
+	cfg := config.Get()
+	if cfg.PairEnabled {
+		if err := e.initPairManager(); err != nil {
+			logger.Warn("[FeishuExtension] PairManager 初始化失败", zap.Error(err))
+		}
 	}
 
 	// 检测环境状态
