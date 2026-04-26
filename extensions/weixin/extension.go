@@ -84,6 +84,9 @@ func (e *WeixinExtension) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
+	if e.channel != nil {
+		e.channel.Stop()
+	}
 	e.started = false
 	return nil
 }
