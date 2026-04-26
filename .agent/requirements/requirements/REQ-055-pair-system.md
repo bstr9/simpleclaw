@@ -6,7 +6,7 @@ level: story
 priority: P1
 cluster: bridge
 created_at: "2026-04-26T10:00:00"
-updated_at: "2026-04-26T19:00:00"
+updated_at: "2026-04-26T20:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -16,6 +16,12 @@ relations:
   refined_by: []
   related_to: [REQ-014, REQ-033]
 versions:
+  - version: 4
+    date: "2026-04-26T20:00:00"
+    author: ai
+    context: "Oracle 验证后深度修复：飞书/微信扩展集成 PairManager，添加 Pair 配置项，消除所有 deadcode"
+    reason: "完整集成验证"
+    snapshot: "用户配对系统：15/15已实现，4个缺陷全部修复，飞书/微信扩展均已集成"
   - version: 3
     date: "2026-04-26T19:00:00"
     author: ai
@@ -40,6 +46,9 @@ source_code:
   - pkg/pair/store.go
   - pkg/pair/providers/feishu.go
   - pkg/pair/providers/weixin.go
+  - extensions/feishu/extension.go
+  - extensions/weixin/extension.go
+  - pkg/config/config.go
 ---
 
 # Pair 用户配对系统
@@ -49,7 +58,7 @@ source_code:
 
 ## 验收标准
 - [x] Provider 接口：ChannelType()/StartPair(userID)/CheckStatus(userID)/RequiredScopes()/IsUserAuthorized(userID) — `pkg/pair/manager.go:12-18`
-- [x] Manager 配对管理器：RegisterProvider/CheckSessionPair/StartPair/CompletePair/GetUserAuth/GetSessionPair/Close — `pkg/pair/manager.go:33-171`
+- [x] Manager 配对管理器：RegisterProvider/GetProvider/CheckSessionPair/StartPair/CompletePair/GetUserAuth/GetSessionPair/StartCleanupLoop/Close — `pkg/pair/manager.go:33-171`
 - [x] 配对状态三态：StatusPendingPair(pending)/StatusActive(active)/StatusExpired(expired) — `pkg/pair/types.go:5-9`
 - [x] PairStatus 结构体：Paired(bool)/Status/AuthURL/ExpiresAt/Name/OpenID — `pkg/pair/types.go:11-18`
 - [x] UserAuth 结构体：UserID/ChannelType/Token/RefreshToken/Scopes/GrantedAt/ExpiresAt/Name — `pkg/pair/types.go:20-29`
@@ -58,14 +67,14 @@ source_code:
 - [x] PairResult 结构体：Success/AuthURL/Message — `pkg/pair/types.go:46-50`
 - [x] SQLite 持久化存储（modernc.org/sqlite，无 CGO）：user_auths 表 + session_pairs 表 + user 索引 — `pkg/pair/store.go:13,52-72`
 - [x] Store CRUD：SaveUserAuth/GetUserAuth/SaveSessionPair/GetSessionPair/DeleteUserAuth/DeleteSessionPair — `pkg/pair/store.go:86-192`
-- [x] 过期清理：CleanExpired(ctx) 删除过期的 session_pairs 和 user_auths — `pkg/pair/store.go:194-207`，调度调用方为 `Manager.StartCleanupLoop()` `pkg/pair/manager.go:30-52`
+- [x] 过期清理：CleanExpired(ctx) 删除过期的 session_pairs 和 user_auths — `pkg/pair/store.go:194-207`，调度调用方为 `Manager.StartCleanupLoop()` `pkg/pair/manager.go:30-52`，飞书扩展在 `initPairManager()` 中启动 `extensions/feishu/extension.go:163`
 - [x] 飞书 Provider：lark-cli 设备码认证流程，config init → auth login --no-wait → auth status — `pkg/pair/providers/feishu.go:56-115`
-- [x] 微信 Provider：函数注入模式（SetLoginStatusFunc/SetQRURLFunc），默认已配对 — `pkg/pair/providers/weixin.go:18-24`（已编码但未集成到微信渠道）
+- [x] 微信 Provider：函数注入模式（SetLoginStatusFunc/SetQRURLFunc），默认已配对 — `pkg/pair/providers/weixin.go:18-24`，已集成到微信扩展 `extensions/weixin/extension.go:106-157`
 - [x] 会话配对检查流程：先查 SessionPair → 有效则返回 Active → 再查 UserAuth → 有效则自动创建 SessionPair → 否则返回 PendingPair — `pkg/pair/manager.go:40-76`
 - [x] 并发安全：Manager 使用 sync.RWMutex，Store 使用 sync.RWMutex — `manager.go:21`, `store.go:17`
 
 ## 已知缺陷
-1. ~~**CleanExpired 无调度调用**~~：已修复，`Manager.StartCleanupLoop()` 提供定时清理协程
-2. ~~**微信 Provider 未集成**~~：已添加 `NewWeixinProviderFromChannel()` 工厂方法，待微信渠道 Startup 时调用
+1. ~~**CleanExpired 无调度调用**~~：已修复，`Manager.StartCleanupLoop()` 在飞书/微信扩展 Startup 时启动
+2. ~~**微信 Provider 未集成**~~：已修复，`extensions/weixin/extension.go` 完整集成 PairManager + WeixinProvider
 3. ~~**飞书 Provider 重复常量**~~：已修复，改用 `pair.StatusXxx` 包级常量
-4. **无 Pair 配置项**：`pkg/config/` 中缺少 pair_enabled/cleanup_interval 等配置字段
+4. ~~**无 Pair 配置项**~~：已修复，`pkg/config/config.go` 添加 `PairEnabled`/`PairCleanupInterval` 字段

@@ -160,7 +160,15 @@ func (e *FeishuExtension) initPairManager() error {
 	feishuProvider := providers.NewFeishuProvider(cfg.FeishuAppID, cfg.FeishuAppSecret)
 	e.pairManager.RegisterProvider(feishuProvider)
 
-	logger.Info("[FeishuExtension] PairManager 初始化完成")
+	// 启动过期数据清理循环，默认每30分钟清理一次
+	cleanupInterval := 30 * time.Minute
+	if cfg.PairCleanupInterval > 0 {
+		cleanupInterval = time.Duration(cfg.PairCleanupInterval) * time.Minute
+	}
+	e.pairManager.StartCleanupLoop(cleanupInterval)
+
+	logger.Info("[FeishuExtension] PairManager 初始化完成",
+		zap.Duration("cleanup_interval", cleanupInterval))
 	return nil
 }
 
@@ -239,6 +247,14 @@ func (e *FeishuExtension) Shutdown(ctx context.Context) error {
 	if e.stopUpdate != nil {
 		close(e.stopUpdate)
 		e.stopUpdate = nil
+	}
+
+	// 关闭 PairManager
+	if e.pairManager != nil {
+		if err := e.pairManager.Close(); err != nil {
+			logger.Warn("[FeishuExtension] Failed to close PairManager", zap.Error(err))
+		}
+		e.pairManager = nil
 	}
 
 	if e.channel != nil {

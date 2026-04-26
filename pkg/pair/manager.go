@@ -65,6 +65,13 @@ func (m *Manager) RegisterProvider(p Provider) {
 	logger.Info("[PairManager] Provider registered", zap.String("channel", p.ChannelType()))
 }
 
+// GetProvider 获取指定渠道类型的 Provider
+func (m *Manager) GetProvider(channelType string) Provider {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.providers[channelType]
+}
+
 func (m *Manager) CheckSessionPair(sessionID, userID, channelType string) (*PairStatus, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

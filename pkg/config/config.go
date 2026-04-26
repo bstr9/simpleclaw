@@ -175,6 +175,10 @@ type Config struct {
 	MemoryMaxTokens    int    `mapstructure:"memory_max_tokens"`
 	MemorySummaryModel string `mapstructure:"memory_summary_model"`
 
+	// Pair 配对系统配置
+	PairEnabled         bool `mapstructure:"pair_enabled"`
+	PairCleanupInterval int  `mapstructure:"pair_cleanup_interval"`
+
 	// Admin 管理后台配置
 	Admin *AdminConfig `mapstructure:"admin"`
 }

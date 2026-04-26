@@ -81,8 +81,12 @@ func getDefaultConfig() *Config {
 		// 插件默认值
 		PluginTriggerPrefix: "$",
 
-		// 清除记忆命令默认值
-		ClearMemoryCommands: []string{"#清除记忆"},
+	// 清除记忆命令默认值
+	ClearMemoryCommands: []string{"#清除记忆"},
+
+	// Pair 配对系统默认值
+	PairEnabled:         true,
+	PairCleanupInterval: 30,
 	}
 }
 
@@ -214,6 +218,10 @@ func setDefaults(v *viper.Viper) {
 
 	// 清除记忆命令
 	v.SetDefault("clear_memory_commands", []string{"#清除记忆"})
+
+	// Pair 配对系统
+	v.SetDefault("pair_enabled", true)
+	v.SetDefault("pair_cleanup_interval", 30)
 
 	// Admin 配置
 	v.SetDefault("admin.enabled", true)

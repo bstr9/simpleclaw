@@ -257,6 +257,11 @@ func (w *WeixinChannel) GetLoginStatus() LoginStatus {
 	return w.loginStatus
 }
 
+// GetLoginStatusString 返回当前登录状态的字符串表示
+func (w *WeixinChannel) GetLoginStatusString() string {
+	return string(w.loginStatus)
+}
+
 // GetCurrentQRURL 返回当前二维码 URL
 func (w *WeixinChannel) GetCurrentQRURL() string {
 	return w.currentQRURL
