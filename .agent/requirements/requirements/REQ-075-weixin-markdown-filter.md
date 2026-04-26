@@ -1,12 +1,12 @@
 ---
 id: REQ-075
 title: "微信 Markdown 过滤"
-status: active
+status: completed
 level: story
 priority: P3
 cluster: channel
 created_at: "2026-04-26T22:00:00"
-updated_at: "2026-04-26T22:00:00"
+updated_at: "2026-04-27T12:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -32,11 +32,11 @@ source_code:
 微信个人号不支持 markdown 渲染，但 AI 模型输出通常包含 markdown 语法（`**bold**`、`*italic*`、`` `code` ``、`### heading` 等）。发送前需要过滤这些语法，否则用户看到的是原始 markdown 标记。
 
 ## 验收标准
-- [ ] Markdown 过滤器：移除 `**bold**`、`*italic*`、`` `code` ``、`### heading`、`- list`、`> quote` 等语法 — 参考 openclaw-weixin `src/messaging/markdown-filter.ts`
-- [ ] 过滤在 sendText 前执行
-- [ ] 通过配置开关控制是否启用（默认启用）
-- [ ] 保留原始文本内容，仅移除格式标记
-- [ ] 代码块（```...```）内容不过滤
+- [x] Markdown 过滤器：移除 `**bold**`、`*italic*`、`` `code` ``、`### heading`、`- list`、`> quote` 等语法 — `pkg/channel/weixin/markdown.go`
+- [x] 过滤在 sendText 前执行 — `Send()` weixin_channel.go
+- [x] 通过配置开关控制是否启用（默认启用）— `Config.MarkdownFilterEnabled` + `initConfig()`
+- [x] 保留原始文本内容，仅移除格式标记 — markdown.go 正则替换保留 $1
+- [x] 代码块（```...```）内容不过滤 — markdown.go:98-105
 
 ## 代码参考
 | 验收标准 | 代码位置 |

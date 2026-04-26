@@ -1,12 +1,12 @@
 ---
 id: REQ-073
 title: "微信 contextToken 持久化"
-status: active
+status: completed
 level: story
 priority: P2
 cluster: channel
 created_at: "2026-04-26T22:00:00"
-updated_at: "2026-04-26T22:00:00"
+updated_at: "2026-04-27T12:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -32,11 +32,11 @@ source_code:
 contextToken 是微信消息回复的必要参数，标识当前会话上下文。当前仅保存在内存 map 中，进程重启后丢失，导致重启后无法回复用户消息（直到用户再次发送新消息）。需要持久化到磁盘。
 
 ## 验收标准
-- [ ] contextToken 变更时写入文件 — 参考 openclaw-weixin `src/messaging/inbound.ts`
-- [ ] 启动时从文件加载 contextToken — 参考 openclaw-weixin `src/channel.ts:367`
-- [ ] 每账号独立 contextToken 文件：`{accountId}.context-tokens.json` — 参考 openclaw-weixin `src/auth/accounts.ts:218`
-- [ ] 关闭时保存当前 contextToken 到文件
-- [ ] 文件写入失败时仅打印警告，不影响主流程
+- [x] contextToken 变更时写入文件 — `pkg/channel/weixin/session.go:147-177` ContextTokenStore.Save
+- [x] 启动时从文件加载 contextToken — `pkg/channel/weixin/session.go:180-204` ContextTokenStore.Load
+- [x] 每账号独立 contextToken 文件：`{accountId}.context-tokens.json` — `resolveAccountFilePath()` session.go:28-30
+- [x] 关闭时保存当前 contextToken 到文件 — `Stop()` weixin_channel.go
+- [x] 文件写入失败时仅打印警告，不影响主流程
 
 ## 代码参考
 | 验收标准 | 代码位置 |
