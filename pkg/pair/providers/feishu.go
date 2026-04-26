@@ -18,12 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	StatusPendingPair = "pending"
-	StatusActive      = "active"
-	StatusExpired     = "expired"
-)
-
 type FeishuProvider struct {
 	appID     string
 	appSecret string
@@ -165,7 +159,7 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
-		return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
+		return pair.PairStatus{Paired: false, Status: pair.StatusPendingPair}, nil
 	}
 
 	var status struct {
@@ -177,20 +171,20 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 	}
 
 	if err := json.Unmarshal(output, &status); err != nil {
-		return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
+		return pair.PairStatus{Paired: false, Status: pair.StatusPendingPair}, nil
 	}
 
 	if status.Identity == "user" || (status.Identity == "bot" && status.Note == "") {
 		userInfo, _ := p.getUserInfo()
 		return pair.PairStatus{
 			Paired: true,
-			Status: StatusActive,
+			Status: pair.StatusActive,
 			Name:   userInfo.Name,
 			OpenID: userInfo.OpenID,
 		}, nil
 	}
 
-	return pair.PairStatus{Paired: false, Status: StatusPendingPair}, nil
+	return pair.PairStatus{Paired: false, Status: pair.StatusPendingPair}, nil
 }
 
 type feishuUserInfo struct {

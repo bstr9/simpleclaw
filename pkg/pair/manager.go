@@ -1,6 +1,7 @@
 package pair
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type Manager struct {
 	mu        sync.RWMutex
 	store     *Store
 	providers map[string]Provider
+	cancel    context.CancelFunc
 }
 
 func NewManager(store *Store) *Manager {
@@ -28,6 +30,32 @@ func NewManager(store *Store) *Manager {
 		store:     store,
 		providers: make(map[string]Provider),
 	}
+}
+
+// StartCleanupLoop 启动过期数据清理循环，每隔 interval 执行一次 CleanExpired
+func (m *Manager) StartCleanupLoop(interval time.Duration) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		logger.Info("[PairManager] 过期清理循环已启动",
+			zap.Duration("interval", interval))
+
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Info("[PairManager] 过期清理循环已停止")
+				return
+			case <-ticker.C:
+				if err := m.store.CleanExpired(ctx); err != nil {
+					logger.Warn("[PairManager] 清理过期数据失败", zap.Error(err))
+				}
+			}
+		}
+	}()
 }
 
 func (m *Manager) RegisterProvider(p Provider) {
@@ -167,5 +195,8 @@ func (m *Manager) GetSessionPair(sessionID string) (*SessionPair, error) {
 }
 
 func (m *Manager) Close() error {
+	if m.cancel != nil {
+		m.cancel()
+	}
 	return m.store.Close()
 }

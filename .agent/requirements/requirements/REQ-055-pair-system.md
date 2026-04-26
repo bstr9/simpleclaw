@@ -6,7 +6,7 @@ level: story
 priority: P1
 cluster: bridge
 created_at: "2026-04-26T10:00:00"
-updated_at: "2026-04-26T18:00:00"
+updated_at: "2026-04-26T19:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -16,6 +16,12 @@ relations:
   refined_by: []
   related_to: [REQ-014, REQ-033]
 versions:
+  - version: 3
+    date: "2026-04-26T19:00:00"
+    author: ai
+    context: "修复3个已知缺陷：CleanExpired调度、FeishuProvider重复常量、WeixinProvider集成"
+    reason: "代码缺陷修复后更新验收标准"
+    snapshot: "用户配对系统：15/15已实现，3个缺陷已修复"
   - version: 2
     date: "2026-04-26T18:00:00"
     author: ai
@@ -52,14 +58,14 @@ source_code:
 - [x] PairResult 结构体：Success/AuthURL/Message — `pkg/pair/types.go:46-50`
 - [x] SQLite 持久化存储（modernc.org/sqlite，无 CGO）：user_auths 表 + session_pairs 表 + user 索引 — `pkg/pair/store.go:13,52-72`
 - [x] Store CRUD：SaveUserAuth/GetUserAuth/SaveSessionPair/GetSessionPair/DeleteUserAuth/DeleteSessionPair — `pkg/pair/store.go:86-192`
-- [ ] 过期清理：CleanExpired(ctx) 删除过期的 session_pairs 和 user_auths — 已编码(`store.go:194-207`)但无调度调用方，过期记录会无限累积
+- [x] 过期清理：CleanExpired(ctx) 删除过期的 session_pairs 和 user_auths — `pkg/pair/store.go:194-207`，调度调用方为 `Manager.StartCleanupLoop()` `pkg/pair/manager.go:30-52`
 - [x] 飞书 Provider：lark-cli 设备码认证流程，config init → auth login --no-wait → auth status — `pkg/pair/providers/feishu.go:56-115`
 - [x] 微信 Provider：函数注入模式（SetLoginStatusFunc/SetQRURLFunc），默认已配对 — `pkg/pair/providers/weixin.go:18-24`（已编码但未集成到微信渠道）
 - [x] 会话配对检查流程：先查 SessionPair → 有效则返回 Active → 再查 UserAuth → 有效则自动创建 SessionPair → 否则返回 PendingPair — `pkg/pair/manager.go:40-76`
 - [x] 并发安全：Manager 使用 sync.RWMutex，Store 使用 sync.RWMutex — `manager.go:21`, `store.go:17`
 
 ## 已知缺陷
-1. **CleanExpired 无调度调用**：`Store.CleanExpired()` 已实现但全代码库无调用方，建议在 `Manager` 或 `Extension.Startup()` 中添加定时清理协程
-2. **微信 Provider 未集成**：`providers/weixin.go` 已编码但从未注册到微信渠道，`StartPair` 返回空字符串(no-op)
-3. **飞书 Provider 重复常量**：`providers/feishu.go:20-24` 重新声明了 `StatusPendingPair/StatusActive/StatusExpired`，应引用 `pair.StatusPendingPair`
+1. ~~**CleanExpired 无调度调用**~~：已修复，`Manager.StartCleanupLoop()` 提供定时清理协程
+2. ~~**微信 Provider 未集成**~~：已添加 `NewWeixinProviderFromChannel()` 工厂方法，待微信渠道 Startup 时调用
+3. ~~**飞书 Provider 重复常量**~~：已修复，改用 `pair.StatusXxx` 包级常量
 4. **无 Pair 配置项**：`pkg/config/` 中缺少 pair_enabled/cleanup_interval 等配置字段

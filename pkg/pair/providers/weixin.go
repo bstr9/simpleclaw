@@ -11,8 +11,17 @@ type WeixinProvider struct {
 	getQRURL       func() string
 }
 
+// NewWeixinProvider 创建微信配对提供者
 func NewWeixinProvider() *WeixinProvider {
 	return &WeixinProvider{}
+}
+
+// NewWeixinProviderFromChannel 从微信渠道实例创建配对提供者，自动绑定登录状态和二维码 URL
+func NewWeixinProviderFromChannel(getLoginStatus func() string, getQRURL func() string) *WeixinProvider {
+	return &WeixinProvider{
+		getLoginStatus: getLoginStatus,
+		getQRURL:       getQRURL,
+	}
 }
 
 func (p *WeixinProvider) SetLoginStatusFunc(fn func() string) {
