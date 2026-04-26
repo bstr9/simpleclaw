@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bstr9/simpleclaw/pkg/channel"
 	"github.com/bstr9/simpleclaw/pkg/config"
+	"github.com/bstr9/simpleclaw/pkg/llm"
 	"github.com/bstr9/simpleclaw/pkg/logger"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -83,6 +85,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/test/llm", s.withAuth(s.handleTestLLM))
 	s.mux.HandleFunc("/admin/api/status", s.handleStatus)
 	s.mux.HandleFunc("/admin/api/channels", s.withAuth(s.handleChannels))
+	s.mux.HandleFunc("/admin/api/channels/", s.withAuth(s.handleChannelAction))
 	s.mux.HandleFunc("/admin/api/providers", s.handleProviders)
 	s.mux.HandleFunc("/message", s.proxyToWebChannel)
 	s.mux.HandleFunc("/stream", s.proxyToWebChannel)
@@ -406,6 +409,63 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	writeAPISuccess(w, channels)
 }
 
+// handleChannelAction 处理渠道操作请求（如启动/停止）
+func (s *Server) handleChannelAction(w http.ResponseWriter, r *http.Request) {
+	// 从 URL 路径解析渠道名称: /admin/api/channels/{name}/toggle
+	path := r.URL.Path
+	prefix := "/admin/api/channels/"
+	if !strings.HasPrefix(path, prefix) {
+		writeAPIError(w, http.StatusNotFound, "Not found")
+		return
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	parts := strings.SplitN(rest, "/", 2)
+	channelName := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = strings.TrimSuffix(parts[1], "/")
+	}
+
+	if action != "toggle" {
+		writeAPIError(w, http.StatusNotFound, "未知操作")
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	mgr := channel.GetChannelManager()
+	if mgr == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "渠道管理器不可用")
+		return
+	}
+
+	ch := mgr.GetChannel(channelName)
+	if ch != nil {
+		// 渠道正在运行，停止它
+		mgr.Stop(channelName)
+		writeAPISuccess(w, map[string]any{
+			"channel": channelName,
+			"action":  "stopped",
+			"running": false,
+		})
+	} else {
+		// 渠道未运行，启动它
+		err := mgr.AddChannel(channelName)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "启动渠道失败: "+err.Error())
+			return
+		}
+		writeAPISuccess(w, map[string]any{
+			"channel": channelName,
+			"action":  "started",
+			"running": true,
+		})
+	}
+}
+
 func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
@@ -549,24 +609,49 @@ func (s *Server) saveConfigWithAdmin(cfg *config.Config, adminCfg *AdminConfig) 
 	return s.saveConfig(configMap)
 }
 
+// testLLMConnection 测试 LLM 连接是否可用
 func (s *Server) testLLMConnection(req *TestLLMRequest) *TestLLMResponse {
-	return &TestLLMResponse{
-		Success: true,
-		Model:   req.Model,
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	model, err := llm.NewModel(llm.ModelConfig{
+		Provider: req.Provider,
+		Model:    req.Model,
+		APIKey:   req.APIKey,
+		APIBase:  req.APIBase,
+	})
+	if err != nil {
+		return &TestLLMResponse{Success: false, Model: req.Model, Error: err.Error()}
 	}
+
+	resp, err := model.Call(ctx, []llm.Message{
+		{Role: llm.RoleUser, Content: "Hi"},
+	}, llm.WithMaxTokens(5))
+	if err != nil {
+		return &TestLLMResponse{Success: false, Model: req.Model, Error: err.Error()}
+	}
+
+	return &TestLLMResponse{Success: true, Model: resp.Model}
 }
 
+// getChannelStatuses 获取渠道运行状态
 func (s *Server) getChannelStatuses() []ChannelStatus {
 	cfg := config.Get()
 	channels := parseChannelTypes(cfg.ChannelType)
 
+	mgr := channel.GetChannelManager()
 	statuses := make([]ChannelStatus, 0, len(channels))
 	for _, ch := range channels {
+		running := false
+		if mgr != nil {
+			channelInst := mgr.GetChannel(ch)
+			running = channelInst != nil
+		}
 		statuses = append(statuses, ChannelStatus{
 			Name:    ch,
 			Type:    ch,
 			Enabled: true,
-			Running: true,
+			Running: running,
 		})
 	}
 

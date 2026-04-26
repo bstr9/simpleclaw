@@ -87,6 +87,7 @@ func (e *FeishuExtension) Register(api extension.ExtensionAPI) error {
 	cfg := config.Get()
 	larkCLITool := tools.NewLarkCLITool(
 		tools.WithAppCredentials(cfg.FeishuAppID, cfg.FeishuAppSecret),
+		tools.WithCLIPath(cfg.LarkCLIPath),
 	)
 	api.RegisterTool(larkCLITool)
 	logger.Info("[FeishuExtension] lark_cli tool registered",

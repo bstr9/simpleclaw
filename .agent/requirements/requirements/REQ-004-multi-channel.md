@@ -6,14 +6,14 @@ level: epic
 priority: P0
 cluster: channels
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-22T16:13:03"
+updated_at: "2026-04-25T19:01:52"
 relations:
   supersedes: []
   conflicts_with: []
   refines: []
   merged_from: []
   depends_on: []
-  refined_by: [REQ-014, REQ-015, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038]
+  refined_by: [REQ-014, REQ-015, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-050, REQ-053]
   related_to: [REQ-005, REQ-007]
 versions:
   - version: 1
@@ -24,6 +24,18 @@ versions:
     snapshot: "9 个消息渠道：Terminal、Web、飞书、钉钉、微信、公众号、微信客服、企微机器人、QQ"
   - version: 2
     date: "2026-04-22T16:13:03"
+    author: ai
+    context: "元数据自动同步"
+    reason: "自动补充反向关系: refined_by"
+    snapshot: "自动同步元数据"
+  - version: 3
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现 Terminal 渠道已有独立 Story REQ-050"
+    reason: "补充 refined_by: REQ-050（Terminal 渠道）"
+    snapshot: "多渠道接入系统，Terminal 渠道由 REQ-050 覆盖"
+  - version: 4
+    date: "2026-04-25T19:01:52"
     author: ai
     context: "元数据自动同步"
     reason: "自动补充反向关系: refined_by"

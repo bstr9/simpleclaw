@@ -6,14 +6,14 @@ level: epic
 priority: P0
 cluster: bridge
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-23T16:00:00"
+updated_at: "2026-04-25T19:01:52"
 relations:
   supersedes: []
   conflicts_with: []
   refines: []
   merged_from: []
   depends_on: [REQ-001, REQ-004, REQ-005]
-  refined_by: [REQ-016, REQ-017]
+  refined_by: [REQ-016, REQ-017, REQ-047, REQ-048, REQ-049, REQ-055, REQ-054]
   related_to: []
 versions:
   - version: 1
@@ -34,12 +34,24 @@ versions:
     context: "深度分析 bridge.go 和 agent_bridge.go 代码，细化验收标准"
     reason: "代码深度分析细化"
     snapshot: "详细 Bridge/AgentBridge 实现：会话隔离、并行组件初始化、Protocol 集成、消息验证、调度器持久化"
+  - version: 4
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现范围过大，8+子系统已有独立 Story"
+    reason: "描述中标注子系统归属，补充 refined_by: REQ-047(API Server)、REQ-048(翻译)、REQ-049(扩展)"
+    snapshot: "桥接与调度系统核心层，子系统已拆分为独立 Story"
+  - version: 5
+    date: "2026-04-25T19:01:52"
+    author: ai
+    context: "元数据自动同步"
+    reason: "自动补充反向关系: refined_by"
+    snapshot: "自动同步元数据"
 ---
 
 # 桥接与调度系统
 
 ## 描述
-连接渠道、LLM 和 Agent 的消息桥接层。Bridge 根据 config.Agent 决定走普通 LLM 模式或 Agent 模式，通过 BotType 路由到对应 LLM 提供商。AgentBridge 管理每个会话的 Agent 实例（会话隔离），并行初始化可选组件（语音/翻译/嵌入器），集成 Protocol 层、Memory、Skills、Plugin 等子系统。定时调度器基于 robfig/cron 支持秒级 Cron 表达式、间隔任务和一次性任务，任务持久化到 JSON 文件。API Server 提供 RESTful 接口和 SSE 流式端点。
+连接渠道、LLM 和 Agent 的消息桥接层。本 Epic 涵盖 Bridge/AgentBridge 核心桥接层和调度器。翻译(REQ-048)、嵌入器、扩展(REQ-049)、API Server(REQ-047)、Admin(REQ-016) 等子系统已有独立 Story。Bridge 根据 config.Agent 决定走普通 LLM 模式或 Agent 模式，通过 BotType 路由到对应 LLM 提供商。AgentBridge 管理每个会话的 Agent 实例（会话隔离），并行初始化可选组件（语音/翻译/嵌入器），集成 Protocol 层、Memory、Skills、Plugin 等子系统。定时调度器基于 robfig/cron 支持秒级 Cron 表达式、间隔任务和一次性任务，任务持久化到 JSON 文件。API Server 提供 RESTful 接口和 SSE 流式端点。
 
 ## 验收标准
 - [x] Bridge 桥接层：FetchReplyContent 根据 cfg.Agent 决定走 Agent 模式（FetchAgentReply）或普通模式（直接 Call LLM）

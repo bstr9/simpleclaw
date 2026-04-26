@@ -111,6 +111,18 @@ async function saveAgentConfig() {
 }
 
 onMounted(loadData)
+
+// TODO: 渠道启停功能需要后端 API 支持（POST /admin/api/channels/:name/toggle）
+// 当前后端仅提供 GET /admin/api/channels 查询渠道状态，尚未实现启停接口
+async function toggleChannel(channel: { name: string; active: boolean }, enable: boolean) {
+  try {
+    // TODO: 调用后端启停 API，示例：
+    // await configApi.toggleChannel(channel.name, enable)
+    ElMessage.warning('渠道启停功能需要后端 API 支持')
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
 </script>
 
 <template>
@@ -243,6 +255,7 @@ onMounted(loadData)
                   type="primary" 
                   size="small"
                   text
+                  @click="toggleChannel(row, true)"
                 >
                   启动
                 </el-button>
@@ -251,6 +264,7 @@ onMounted(loadData)
                   type="danger" 
                   size="small"
                   text
+                  @click="toggleChannel(row, false)"
                 >
                   停止
                 </el-button>

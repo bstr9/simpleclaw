@@ -288,3 +288,11 @@ func ValueOr[T any](p *T, defaultVal T) T {
 	}
 	return *p
 }
+
+// BoolToInt 布尔值转整数，true返回1，false返回0
+func BoolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

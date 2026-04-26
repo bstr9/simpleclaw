@@ -2,6 +2,8 @@
 package scheduler
 
 import (
+	cryptoRand "crypto/rand"
+	"fmt"
 	"time"
 )
 
@@ -89,9 +91,14 @@ func generateTaskID() string {
 func randomSuffix(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
+	randBuf := make([]byte, n)
+	// crypto/rand.Read 在所有主流操作系统上几乎不可能失败，
+	// 如果失败说明系统熵源故障，应立即终止而非生成可预测的 ID
+	if _, err := cryptoRand.Read(randBuf); err != nil {
+		panic(fmt.Sprintf("crypto/rand.Read 失败: %v", err))
+	}
 	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-		time.Sleep(time.Nanosecond)
+		b[i] = letters[int(randBuf[i])%len(letters)]
 	}
 	return string(b)
 }

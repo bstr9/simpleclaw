@@ -6,13 +6,14 @@ level: story
 priority: P1
 cluster: bridge
 created_at: "2026-04-23T10:10:00"
-updated_at: "2026-04-23T18:00:00"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
   refines: [REQ-008]
   merged_from: []
   depends_on: []
+  refined_by: [REQ-053]
   related_to: []
 versions:
   - version: 1
@@ -27,6 +28,12 @@ versions:
     context: "基于 pkg/admin/ 源码逆向补充详细验收标准"
     reason: "代码级验收标准细化"
     snapshot: "Admin 管理界面：SPA + REST API，session cookie 认证(bcrypt+crypto/rand)，配置原子写入，敏感字段脱敏，Web 渠道反向代理，嵌入静态资源"
+  - version: 3
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现提供商列表 API 硬编码 5 个提供商"
+    reason: "在提供商列表 API 验收标准中补充说明，未来应从 REQ-023 工厂注册表动态获取"
+    snapshot: "Admin 管理界面，提供商列表 API 标注硬编码问题"
 source_code:
   - pkg/admin/server.go
   - pkg/admin/auth.go
@@ -55,7 +62,7 @@ Admin 管理界面提供 Web UI 对系统进行配置和监控。支持初始设
 - [x] LLM 连接测试 API `/admin/api/test/llm`（POST，需认证）：接收 provider/api_key/api_base/model 参数，当前返回成功响应（占位实现）
 - [x] 系统状态 API `/admin/api/status`（GET，无需认证）：返回版本号、uptime、渠道状态、是否已配置、是否有密码、LLM 配置状态、脱敏 API Key、base_url、model、channel_type、admin_username
 - [x] 渠道状态 API `/admin/api/channels`（GET，需认证）：解析 `config.ChannelType`（逗号分隔），返回每个渠道的 Name/Type/Enabled/Running 状态
-- [x] 提供商列表 API `/admin/api/providers`（GET，无需认证）：返回 OpenAI/Anthropic/智谱AI/DeepSeek/通义千问 5 个提供商及其可用模型列表
+- [x] 提供商列表 API `/admin/api/providers`（GET，无需认证）：返回 OpenAI/Anthropic/智谱AI/DeepSeek/通义千问 5 个提供商及其可用模型列表（当前硬编码 5 个提供商，未来应从 REQ-023 工厂注册表动态获取）
 - [x] Web 渠道反向代理：`/message`、`/stream`、`/upload`、`/uploads/`、`/config`、`/api/*` 路径转发到 `webChannelURL`（默认 `http://localhost:9899`），支持 SSE 流式转发（http.Flusher）
 - [x] SPA 静态文件服务 `handleSPA`：优先从 StaticDir 本地目录读取，其次从嵌入式 fs.FS 读取，未匹配路径回退 index.html，`/admin/api/*` 路径返回 404
 - [x] 嵌入式 UI：通过 `//go:embed all:static` 嵌入前端构建产物，`HasEmbeddedUI()` 检测 static/index.html 和 static/assets/ 是否存在

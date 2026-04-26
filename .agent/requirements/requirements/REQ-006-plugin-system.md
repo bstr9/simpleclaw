@@ -6,7 +6,7 @@ level: epic
 priority: P1
 cluster: plugins
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-23T10:00:00"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -14,7 +14,7 @@ relations:
   merged_from: []
   depends_on: [REQ-004]
   related_to: [REQ-001, REQ-002]
-  refined_by: [REQ-025, REQ-026, REQ-027, REQ-028, REQ-029]
+  refined_by: [REQ-025, REQ-026, REQ-027, REQ-028, REQ-029, REQ-051, REQ-052]
 versions:
   - version: 1
     date: "2026-04-23T10:00:00"
@@ -22,6 +22,12 @@ versions:
     context: "从代码逆向分析提取需求，来源: pkg/plugin/"
     reason: "逆向代码生成需求"
     snapshot: "事件驱动插件架构，9 个插件，支持消息处理、敏感词过滤、命令扩展、工具调用"
+  - version: 2
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现 hello/dungeon 插件已有独立 Story"
+    reason: "补充 refined_by: REQ-051（hello 插件）、REQ-052（dungeon 插件）"
+    snapshot: "插件系统，hello/dungeon 插件分别由 REQ-051/REQ-052 覆盖"
 ---
 
 # 插件系统

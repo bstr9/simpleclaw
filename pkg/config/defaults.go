@@ -70,9 +70,10 @@ func getDefaultConfig() *Config {
 		// LinkAI 默认值
 		LinkAIAPIBase: "https://api.link-ai.tech",
 
-		// 飞书默认值
-		FeishuPort:      80,
-		FeishuEventMode: "websocket",
+	// 飞书默认值
+	FeishuPort:      80,
+	FeishuEventMode: "websocket",
+	LarkCLIPath:     "lark-cli",
 
 		// 微信公众号默认值
 		WechatmpPort: 8080,
@@ -188,6 +189,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("feishu_token", "")
 	v.SetDefault("feishu_bot_name", "")
 	v.SetDefault("feishu_event_mode", "websocket")
+	v.SetDefault("lark_cli_path", "lark-cli")
 
 	// 钉钉配置
 	v.SetDefault("dingtalk_client_id", "")

@@ -93,7 +93,7 @@ onMounted(loadDashboard)
               <el-icon :size="28"><ChatDotRound /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ status?.total_sessions || 0 }}</div>
+              <div class="stat-value">{{ status?.total_sessions ?? 0 }}</div>
               <div class="stat-label">总会话数</div>
             </div>
           </div>
@@ -117,11 +117,11 @@ onMounted(loadDashboard)
       <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon" :class="status?.llm_connected ? 'success' : 'danger'">
+            <div class="stat-icon" :class="status?.has_llm_config ? 'success' : 'danger'">
               <el-icon :size="28"><Cpu /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ status?.llm_connected ? '正常' : '异常' }}</div>
+              <div class="stat-value">{{ status?.has_llm_config ? '正常' : '异常' }}</div>
               <div class="stat-label">LLM 状态</div>
             </div>
           </div>
@@ -189,7 +189,7 @@ onMounted(loadDashboard)
             <el-descriptions-item label="Go 版本">{{ status?.go_version || '-' }}</el-descriptions-item>
             <el-descriptions-item label="操作系统">{{ status?.os || '-' }}</el-descriptions-item>
             <el-descriptions-item label="内存使用">{{ status?.memory_usage || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="CPU 核心数">{{ status?.cpu_cores || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="CPU 核心数">{{ status?.cpu_cores ?? '-' }}</el-descriptions-item>
             <el-descriptions-item label="启动时间">{{ status?.start_time || '-' }}</el-descriptions-item>
           </el-descriptions>
         </el-card>

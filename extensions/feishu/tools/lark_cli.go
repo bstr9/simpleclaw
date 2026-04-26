@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bstr9/simpleclaw/pkg/agent"
+	"github.com/bstr9/simpleclaw/pkg/config"
 )
 
 // LarkCLITool lark-cli 命令行工具封装。
@@ -24,6 +25,7 @@ type LarkCLITool struct {
 	installed  bool
 	appID      string
 	appSecret  string
+	cliPath    string
 }
 
 // NewLarkCLITool 创建 lark-cli 工具实例。
@@ -32,11 +34,20 @@ func NewLarkCLITool(opts ...LarkCLIToolOption) *LarkCLITool {
 		timeout:    60 * time.Second,
 		workingDir: "",
 		installed:  checkLarkCLIInstalled(),
+		cliPath:    defaultCLIPath(),
 	}
 	for _, opt := range opts {
 		opt(t)
 	}
 	return t
+}
+
+// defaultCLIPath 返回默认 lark-cli 可执行文件路径。
+func defaultCLIPath() string {
+	if path := config.Get().LarkCLIPath; path != "" {
+		return path
+	}
+	return "lark-cli"
 }
 
 // WithAppCredentials 设置应用凭证（与 channel 共享配置）。
@@ -47,9 +58,18 @@ func WithAppCredentials(appID, appSecret string) LarkCLIToolOption {
 	}
 }
 
+// WithCLIPath 设置 lark-cli 可执行文件路径。
+func WithCLIPath(path string) LarkCLIToolOption {
+	return func(t *LarkCLITool) {
+		if path != "" {
+			t.cliPath = path
+		}
+	}
+}
+
 // checkLarkCLIInstalled 检测 lark-cli 是否已安装。
 func checkLarkCLIInstalled() bool {
-	_, err := exec.LookPath("lark-cli")
+	_, err := exec.LookPath(defaultCLIPath())
 	return err == nil
 }
 
@@ -206,7 +226,7 @@ func CheckUpdate() (map[string]string, error) {
 	if checkLarkCLIInstalled() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "lark-cli", "version")
+		cmd := exec.CommandContext(ctx, defaultCLIPath(), "version")
 		output, err := cmd.Output()
 		if err == nil {
 			result["lark_cli_current"] = strings.TrimSpace(string(output))
@@ -277,7 +297,7 @@ func (t *LarkCLITool) StatusDetail() map[string]string {
 		status["lark_cli"] = "已安装"
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "lark-cli", "version")
+		cmd := exec.CommandContext(ctx, defaultCLIPath(), "version")
 		output, err := cmd.Output()
 		if err == nil {
 			status["lark_cli_version"] = strings.TrimSpace(string(output))
@@ -658,7 +678,7 @@ func (t *LarkCLITool) runCommand(args []string, timeout time.Duration) (string, 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "lark-cli", args...)
+	cmd := exec.CommandContext(ctx, t.cliPath, args...)
 
 	if t.workingDir != "" {
 		cmd.Dir = t.workingDir
@@ -681,7 +701,7 @@ func (t *LarkCLITool) runCommand(args []string, timeout time.Duration) (string, 
 	}
 
 	if forceUser {
-		cmd.Args = append([]string{"lark-cli", "--as", "user"}, args[1:]...)
+		cmd.Args = append([]string{t.cliPath, "--as", "user"}, args[1:]...)
 	}
 
 	var stdout, stderr bytes.Buffer

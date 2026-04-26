@@ -104,8 +104,6 @@ const (
 	ChannelWeixinAlias = "wx"
 	// ChannelWechatMP 微信公众号渠道
 	ChannelWechatMP = "wechatmp"
-	// ChannelWechatMPService 微信公众号服务渠道
-	ChannelWechatMPService = "wechatmp_service"
 	// ChannelWechatComApp 企业微信应用渠道
 	ChannelWechatComApp = "wechatcom_app"
 	// ChannelWecomBot 企业微信机器人渠道
@@ -129,7 +127,6 @@ func init() {
 		ChannelWeixin,
 		ChannelWeixinAlias,
 		ChannelWechatMP,
-		ChannelWechatMPService,
 		ChannelWechatComApp,
 		ChannelWecomBot,
 		ChannelQQ,

@@ -6,7 +6,7 @@ level: epic
 priority: P0
 cluster: llm
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-23T10:00:00"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -22,6 +22,12 @@ versions:
     context: "从代码逆向分析提取需求，来源: pkg/llm/"
     reason: "逆向代码生成需求"
     snapshot: "15+ LLM 提供商统一适配，支持同步/流式调用、Function Calling、多模态输入"
+  - version: 2
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查确认 Epic 级别不需要精确提供商计数"
+    reason: "与 REQ-023 计数对齐审查，保持 15+ 表述不变（Epic 级别允许模糊计数）"
+    snapshot: "15+ LLM 提供商统一适配，Epic 级别计数保持不变"
 ---
 
 # LLM 提供商适配层

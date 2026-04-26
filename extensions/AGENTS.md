@@ -8,7 +8,6 @@ extensions/
 ├── feishu/            # 飞书扩展（完整模板）
 │   ├── extension.go   # Extension 接口实现
 │   ├── tools/         # 扩展工具
-│   │   ├── doc.go     # 飞书文档工具（旧版API）
 │   │   └── lark_cli.go # lark-cli 封装工具
 │   └── skills/        # 扩展技能
 │       └── feishu_doc/
@@ -31,7 +30,6 @@ extensions/
 | 工具 | 说明 |
 |------|------|
 | `lark_cli` | 封装 lark-cli 命令，支持 11 个业务域 200+ 命令 |
-| `feishu_doc` | 飞书文档操作（旧版API，保持兼容） |
 
 ### 技能
 

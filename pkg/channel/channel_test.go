@@ -20,7 +20,6 @@ func TestChannelType(t *testing.T) {
 		{"微信渠道", ChannelWeixin, "weixin"},
 		{"微信别名", ChannelWeixinAlias, "wx"},
 		{"微信公众号", ChannelWechatMP, "wechatmp"},
-		{"公众号服务", ChannelWechatMPService, "wechatmp_service"},
 		{"企业微信应用", ChannelWechatComApp, "wechatcom_app"},
 		{"企业微信机器人", ChannelWecomBot, "wecom_bot"},
 		{"QQ渠道", ChannelQQ, "qq"},

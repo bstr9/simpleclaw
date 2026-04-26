@@ -31,14 +31,15 @@ export interface SetupRequest {
 
 export interface SystemStatus {
   version: string
-  go_version: string
-  os: string
+  go_version?: string
+  os?: string
   uptime: string
-  start_time: string
-  memory_usage: string
-  cpu_cores: number
-  total_sessions: number
-  llm_connected: boolean
+  start_time?: string
+  memory_usage?: string
+  cpu_cores?: number
+  total_sessions?: number
+  llm_connected?: boolean
+  has_llm_config?: boolean
   has_password: boolean
   is_configured: boolean
 }

@@ -6,7 +6,7 @@ level: story
 priority: P0
 cluster: agent-memory
 created_at: "2026-04-23T10:10:00"
-updated_at: "2026-04-23T18:00:00"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -27,6 +27,12 @@ versions:
     context: "代码逆向分析，扩展验收标准"
     reason: "基于代码分析扩展验收标准至25条"
     snapshot: "长期记忆系统：SQLite WAL模式、混合搜索(0.7/0.3权重)、时间衰减、3种分块策略、EmbeddingCache、非致命降级、4表结构"
+  - version: 3
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现代码缺陷不应作为验收标准"
+    reason: "将 Schema 重复定义和 chunk 级 TTL 从验收标准移至已知问题章节"
+    snapshot: "长期记忆系统验收标准修正，代码缺陷移至已知问题"
 source_code:
   - pkg/agent/memory/memory.go
   - pkg/agent/memory/storage.go
@@ -67,9 +73,11 @@ Agent 长期记忆子系统，将文本分块后生成向量嵌入，存储到 S
 - [x] OpenAIEmbeddingProvider：默认text-embedding-3-small/1536维度, 30秒超时, API Key验证（拒绝空字符串、"YOUR API KEY"、"YOUR_API_KEY"）
 - [x] MemoryFlushManager：LLM摘要生成+规则降级回退, 每日记忆文件, flush触发条件：trim/overflow/daily_summary
 - [x] ConversationStore：SQLite存储, sessions+messages表, LoadMessages(maxTurns默认30), 分页LoadHistoryPage含DisplayTurn渲染
-- [x] Schema重复定义：storage.go和long_term.go独立定义chunks+files表，Storage接口未被LongTermMemory使用
-- [x] 无chunk级TTL：仅messages表有CleanupOldMessages，chunks无过期清理机制
 - [x] 文件变更检测：通过hash/mtime/size检测文件变更，自动重新索引
+
+## 已知问题
+- Schema重复定义：storage.go和long_term.go独立定义chunks+files表，Storage接口未被LongTermMemory使用
+- 无chunk级TTL：仅messages表有CleanupOldMessages，chunks无过期清理机制
 
 ## 代码参考
 
@@ -97,6 +105,10 @@ Agent 长期记忆子系统，将文本分块后生成向量嵌入，存储到 S
 | OpenAIEmbeddingProvider | embedding.go:OpenAIEmbeddingProvider |
 | MemoryFlushManager | summarizer.go:MemoryFlushManager |
 | ConversationStore | conversation_store.go:ConversationStore |
+| 文件变更检测 | long_term.go:AddFile()/索引更新逻辑 |
+
+## 已知问题代码参考
+| 已知问题 | 代码位置 |
+|---------|---------|
 | Schema重复定义 | storage.go + long_term.go:chunks/files表定义 |
 | 无chunk级TTL | long_term.go:无chunk过期清理逻辑 |
-| 文件变更检测 | long_term.go:AddFile()/索引更新逻辑 |

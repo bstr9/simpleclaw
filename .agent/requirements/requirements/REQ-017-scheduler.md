@@ -6,7 +6,7 @@ level: story
 priority: P1
 cluster: bridge
 created_at: "2026-04-23T10:10:00"
-updated_at: "2026-04-23T18:00:00"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -27,6 +27,12 @@ versions:
     context: "基于 pkg/scheduler/ 源码逆向补充详细验收标准"
     reason: "代码级验收标准细化"
     snapshot: "定时调度器：robfig/cron 引擎(秒级)，3种调度类型(cron/interval/once)，2种动作(send_message/agent_task)，JSON文件持久化，全局单例，TaskExecutor 可插拔"
+  - version: 3
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现 randomSuffix 使用错误的随机数生成方式"
+    reason: "在任务 ID 生成规则验收标准中添加 randomSuffix 实现问题注释"
+    snapshot: "定时调度器，标注 randomSuffix 随机源问题"
 source_code:
   - pkg/scheduler/scheduler.go
   - pkg/scheduler/store.go
@@ -52,6 +58,7 @@ source_code:
 - [x] 三种调度类型：ScheduleTypeCron（标准 cron 表达式）、ScheduleTypeInterval（固定间隔秒数，转换为 `@every Ns`）、ScheduleTypeOnce（一次性，RFC3339 时间解析为 6 字段 cron 表达式）
 - [x] 一次性任务(ScheduleTypeOnce)执行后自动从 cron 调度中移除并从 Store 中删除
 - [x] 任务 ID 生成规则：`time.Now().Format("20060102150405")` + 4 字符随机后缀（a-z0-9），默认 Enabled=true
+  > ⚠️ randomSuffix 实现使用 time.Now().UnixNano() + time.Sleep 作为随机源，应改用 crypto/rand 或 math/rand/v2
 - [x] 任务运行时状态跟踪：NextRunAt（下次执行时间，从 cron.Entry.Next 获取）、LastRunAt（上次执行时间）、RunCount（执行次数），每次执行后持久化更新
 - [x] Store 使用 JSON 文件持久化，默认路径 `~/.simpleclaw/scheduler/tasks.json`，创建时自动建目录（0755 权限）
 - [x] Store 读写锁保护（sync.RWMutex），Save/Delete 操作后自动调用 persist 写入文件，JSON 缩进格式（MarshalIndent）

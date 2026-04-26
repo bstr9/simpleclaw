@@ -124,6 +124,8 @@ type Config struct {
 	FeishuToken     string `mapstructure:"feishu_token"`
 	FeishuBotName   string `mapstructure:"feishu_bot_name"`
 	FeishuEventMode string `mapstructure:"feishu_event_mode"`
+	// LarkCLIPath lark-cli 可执行文件路径（默认 "lark-cli"）
+	LarkCLIPath string `mapstructure:"lark_cli_path"`
 
 	// 钉钉配置
 	DingtalkClientID     string `mapstructure:"dingtalk_client_id"`

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bstr9/simpleclaw/pkg/config"
 	"github.com/bstr9/simpleclaw/pkg/logger"
 	"github.com/bstr9/simpleclaw/pkg/pair"
 	"go.uber.org/zap"
@@ -26,15 +27,21 @@ const (
 type FeishuProvider struct {
 	appID     string
 	appSecret string
+	cliPath   string
 
 	mu           sync.RWMutex
 	pendingCodes map[string]string // userID -> deviceCode
 }
 
 func NewFeishuProvider(appID, appSecret string) *FeishuProvider {
+	cliPath := "lark-cli"
+	if path := config.Get().LarkCLIPath; path != "" {
+		cliPath = path
+	}
 	return &FeishuProvider{
 		appID:        appID,
 		appSecret:    appSecret,
+		cliPath:      cliPath,
 		pendingCodes: make(map[string]string),
 	}
 }
@@ -57,7 +64,7 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	initCmd := exec.CommandContext(ctx, "lark-cli", "config", "init",
+	initCmd := exec.CommandContext(ctx, p.cliPath, "config", "init",
 		"--app-id", p.appID,
 		"--brand", "feishu",
 		"--app-secret-stdin",
@@ -69,7 +76,7 @@ func (p *FeishuProvider) StartPair(userID string) (string, error) {
 		logger.Warn("lark-cli config init failed, continuing with auth login", zap.Error(err))
 	}
 
-	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "login",
+	cmd := exec.CommandContext(ctx, p.cliPath, "auth", "login",
 		"--no-wait",
 		"--recommend",
 		"--json",
@@ -123,7 +130,7 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, "lark-cli", "auth", "login",
+		cmd := exec.CommandContext(ctx, p.cliPath, "auth", "login",
 			"--device-code", deviceCode,
 			"--json",
 		)
@@ -149,7 +156,7 @@ func (p *FeishuProvider) CheckStatus(userID string) (pair.PairStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "lark-cli", "auth", "status")
+	cmd := exec.CommandContext(ctx, p.cliPath, "auth", "status")
 
 	cmd.Env = append(os.Environ(),
 		"LARK_APP_ID="+p.appID,
@@ -195,7 +202,7 @@ func (p *FeishuProvider) getUserInfo() (*feishuUserInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "lark-cli", "contact", "+get-user", "--format", "json")
+	cmd := exec.CommandContext(ctx, p.cliPath, "contact", "+get-user", "--format", "json")
 	cmd.Env = os.Environ()
 
 	output, err := cmd.Output()

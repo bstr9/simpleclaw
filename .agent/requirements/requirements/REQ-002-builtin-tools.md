@@ -6,7 +6,7 @@ level: epic
 priority: P0
 cluster: agent-tools
 created_at: "2026-04-23T10:00:00"
-updated_at: "2026-04-22T16:13:03"
+updated_at: "2026-04-26T10:00:00"
 relations:
   supersedes: []
   conflicts_with: []
@@ -28,6 +28,12 @@ versions:
     context: "元数据自动同步"
     reason: "自动补充反向关系: refined_by"
     snapshot: "自动同步元数据"
+  - version: 3
+    date: "2026-04-26T10:00:00"
+    author: ai
+    context: "需求审查发现工具名称不匹配和缺失实现"
+    reason: "添加已知问题章节：scheduler Name() 返回 'cron'、memory_search Name() 返回 'memory'、grep/find/terminal 无实现"
+    snapshot: "内置工具系统，标注工具名称不匹配和缺失实现问题"
 ---
 
 # 内置工具系统
@@ -45,3 +51,8 @@ Agent 可调用的 14 个内置工具，统一实现 Tool 接口（Name/Descript
 - [x] 辅助工具：vision（图像识别）、env_config（环境变量和 API 密钥管理）、send（发送文件给用户）
 - [x] 工具配置化启用/禁用（web_search、web_fetch 通过 config 控制）
 - [x] Bash 工具安全控制（WithBashDenyList 禁止危险命令）
+
+## 已知问题
+- scheduler 工具 Name() 返回 'cron' 而非 'scheduler'，与配置键名不一致
+- memory_search 工具 Name() 返回 'memory'，与 memory_write 工具共用名称
+- grep/find/terminal 工具在 AGENTS.md 中列出但代码中无实现
