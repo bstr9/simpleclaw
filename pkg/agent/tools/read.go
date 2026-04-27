@@ -119,18 +119,22 @@ func (t *ReadTool) resolvePath(path string) string {
 	// 展开 ~ 到用户主目录
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, path[2:])
+		return filepath.ToSlash(filepath.Join(home, path[2:]))
 	}
-	// 绝对路径
+	// Unix 风格绝对路径（以 / 开头）
+	if strings.HasPrefix(path, "/") {
+		return filepath.ToSlash(path)
+	}
+	// Windows 绝对路径
 	if filepath.IsAbs(path) {
-		return path
+		return filepath.ToSlash(path)
 	}
 	// 相对路径
 	if t.workingDir != "" {
-		return filepath.Join(t.workingDir, path)
+		return filepath.ToSlash(filepath.Join(t.workingDir, path))
 	}
 	abs, _ := filepath.Abs(path)
-	return abs
+	return filepath.ToSlash(abs)
 }
 
 func (t *ReadTool) processTextContent(content []byte, offset, limit int, displayPath string) map[string]any {

@@ -5,6 +5,7 @@ package extension
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/bstr9/simpleclaw/pkg/agent"
@@ -206,8 +207,13 @@ func (a *API) EmitEvent(ctx context.Context, event string, data any) error {
 // ResolvePath 解析路径。
 // 相对路径会相对于扩展目录解析。
 func (a *API) ResolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
+	// Unix 风格绝对路径（以 / 开头）
+	if strings.HasPrefix(path, "/") {
+		return filepath.ToSlash(path)
 	}
-	return filepath.Join(a.extensionDir, path)
+	// Windows 绝对路径
+	if filepath.IsAbs(path) {
+		return filepath.ToSlash(path)
+	}
+	return filepath.ToSlash(filepath.Join(a.extensionDir, path))
 }

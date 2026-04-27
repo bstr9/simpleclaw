@@ -311,6 +311,7 @@ func TestSyncToEnv(t *testing.T) {
 	os.Unsetenv("TEST_CLAUDE_API_KEY")
 
 	cfg := &Config{
+		SyncToEnv:     true,
 		OpenAIAPIKey:  "test-openai-key",
 		ClaudeAPIKey:  "test-claude-key",
 		GeminiAPIKey:  "test-gemini-key",

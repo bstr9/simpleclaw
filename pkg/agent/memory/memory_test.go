@@ -491,6 +491,10 @@ func TestComputeHash(t *testing.T) {
 
 func TestGenerateID(t *testing.T) {
 	id1 := generateID("内容")
+
+	// 确保时间戳不同
+	time.Sleep(time.Millisecond)
+
 	id2 := generateID("内容")
 
 	if id1 == id2 {

@@ -190,18 +190,22 @@ func (t *MemoryTool) handleGet(params map[string]any) (*agent.ToolResult, error)
 }
 
 func (t *MemoryTool) getMemoryDir() string {
-	return filepath.Join(t.workingDir, "memory")
+	return filepath.ToSlash(filepath.Join(t.workingDir, "memory"))
 }
 
 func (t *MemoryTool) resolvePath(path string) string {
+	// Unix 风格绝对路径（以 / 开头）
+	if strings.HasPrefix(path, "/") {
+		return filepath.ToSlash(path)
+	}
 	if filepath.IsAbs(path) {
-		return path
+		return filepath.ToSlash(path)
 	}
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, path[2:])
+		return filepath.ToSlash(filepath.Join(home, path[2:]))
 	}
-	return filepath.Join(t.workingDir, path)
+	return filepath.ToSlash(filepath.Join(t.workingDir, path))
 }
 
 func (t *MemoryTool) searchInMemory(query string, memoryDir string, maxResults int) []map[string]any {
