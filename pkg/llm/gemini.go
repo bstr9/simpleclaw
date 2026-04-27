@@ -66,13 +66,13 @@ type geminiInlineData struct {
 // geminiFunctionCall 表示函数调用
 type geminiFunctionCall struct {
 	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args,omitempty"`
+	Args map[string]any `json:"args,omitempty"`
 }
 
 // geminiFunctionResponse 表示函数响应
 type geminiFunctionResponse struct {
 	Name     string                 `json:"name"`
-	Response map[string]interface{} `json:"response"`
+	Response map[string]any `json:"response"`
 }
 
 // geminiSafetySetting 安全设置
@@ -99,7 +99,7 @@ type geminiTool struct {
 type geminiFunctionDeclaration struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
 // Gemini API 响应结构体
@@ -535,9 +535,9 @@ func (m *GeminiModel) convertMessageToGeminiContent(msg Message) *geminiContent 
 	// 处理工具调用结果
 	if msg.Role == RoleTool && msg.ToolCallID != "" {
 		// 解析工具响应
-		var responseData map[string]interface{}
+		var responseData map[string]any
 		if err := json.Unmarshal([]byte(msg.Content), &responseData); err != nil {
-			responseData = map[string]interface{}{"result": msg.Content}
+			responseData = map[string]any{"result": msg.Content}
 		}
 		content.Parts = append(content.Parts, geminiPart{
 			FunctionResponse: &geminiFunctionResponse{
@@ -551,9 +551,9 @@ func (m *GeminiModel) convertMessageToGeminiContent(msg Message) *geminiContent 
 	// 处理助手消息中的工具调用
 	if len(msg.ToolCalls) > 0 {
 		for _, tc := range msg.ToolCalls {
-			var args map[string]interface{}
+			var args map[string]any
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-				args = map[string]interface{}{}
+				args = map[string]any{}
 			}
 			content.Parts = append(content.Parts, geminiPart{
 				FunctionCall: &geminiFunctionCall{
@@ -582,10 +582,10 @@ func (m *GeminiModel) convertToolsToGeminiFormat(tools []ToolDefinition) []gemin
 	declarations := make([]geminiFunctionDeclaration, 0, len(tools))
 
 	for _, tool := range tools {
-		params := make(map[string]interface{})
+		params := make(map[string]any)
 		if tool.Function.Parameters != nil {
 			// 尝试转换为 map
-			if p, ok := tool.Function.Parameters.(map[string]interface{}); ok {
+			if p, ok := tool.Function.Parameters.(map[string]any); ok {
 				params = p
 			} else {
 				// 尝试 JSON 序列化再反序列化

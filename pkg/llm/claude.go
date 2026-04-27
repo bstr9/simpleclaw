@@ -94,7 +94,7 @@ type claudeContentBlock struct {
 type claudeTool struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	InputSchema map[string]any `json:"input_schema"`
 }
 
 // Claude API 响应结构体
@@ -528,10 +528,10 @@ func (m *ClaudeModel) convertToolsToClaudeFormat(tools []ToolDefinition) []claud
 			continue
 		}
 
-		params := make(map[string]interface{})
+		params := make(map[string]any)
 		if tool.Function.Parameters != nil {
 			// 尝试转换为 map
-			if p, ok := tool.Function.Parameters.(map[string]interface{}); ok {
+			if p, ok := tool.Function.Parameters.(map[string]any); ok {
 				params = p
 			} else {
 				// 尝试 JSON 序列化再反序列化

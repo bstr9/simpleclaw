@@ -34,7 +34,7 @@ type Storage interface {
 	// UpdateFileMetadata 更新文件元数据。
 	UpdateFileMetadata(ctx context.Context, path string, source MemorySource, hash string, mtime, size int) error
 	// GetStats 获取存储统计信息。
-	GetStats(ctx context.Context) (map[string]interface{}, error)
+	GetStats(ctx context.Context) (map[string]any, error)
 	// Close 关闭存储连接。
 	Close() error
 }
@@ -247,9 +247,9 @@ type scoredVectorResult struct {
 }
 
 // buildVectorSearchQuery 构建向量搜索的 SQL 查询和参数。
-func buildVectorSearchQuery(opts *SearchOptions) (string, []interface{}) {
+func buildVectorSearchQuery(opts *SearchOptions) (string, []any) {
 	query := "SELECT id, path, start_line, end_line, text, source, user_id, embedding FROM chunks WHERE embedding IS NOT NULL"
-	args := []interface{}{}
+	args := []any{}
 
 	if len(opts.Scopes) > 0 {
 		placeholders := ""
@@ -382,9 +382,9 @@ type keywordSearchRow struct {
 }
 
 // buildKeywordSearchQuery 构建关键词搜索的 SQL 查询和参数。
-func buildKeywordSearchQuery(keywords []string, opts *SearchOptions) (string, []interface{}) {
+func buildKeywordSearchQuery(keywords []string, opts *SearchOptions) (string, []any) {
 	likeConditions := ""
-	args := []interface{}{}
+	args := []any{}
 	for i, kw := range keywords {
 		if i > 0 {
 			likeConditions += " OR "
@@ -521,11 +521,11 @@ func (s *SQLiteStorage) UpdateFileMetadata(ctx context.Context, path string, sou
 }
 
 // GetStats 获取存储统计信息。
-func (s *SQLiteStorage) GetStats(ctx context.Context) (map[string]interface{}, error) {
+func (s *SQLiteStorage) GetStats(ctx context.Context) (map[string]any, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	stats := make(map[string]interface{})
+	stats := make(map[string]any)
 
 	var chunksCount int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM chunks").Scan(&chunksCount)

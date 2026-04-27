@@ -302,9 +302,9 @@ func NewExpireMapString(expireDuration time.Duration) ExpireMapString {
 }
 
 // ExpireMapAny 任意类型的过期字典
-type ExpireMapAny = *ExpireMap[string, interface{}]
+type ExpireMapAny = *ExpireMap[string, any]
 
 // NewExpireMapAny 创建任意类型的过期字典
 func NewExpireMapAny(expireDuration time.Duration) ExpireMapAny {
-	return NewExpireMap[string, interface{}](expireDuration)
+	return NewExpireMap[string, any](expireDuration)
 }

@@ -433,9 +433,9 @@ func (m *LongTermMemory) SearchVector(ctx context.Context, embedding []float64, 
 }
 
 // buildVectorSearchQuery 构建向量搜索查询语句和参数。
-func (m *LongTermMemory) buildVectorSearchQuery(opts *SearchOptions) (string, []interface{}) {
+func (m *LongTermMemory) buildVectorSearchQuery(opts *SearchOptions) (string, []any) {
 	query := "SELECT id, path, start_line, end_line, text, source, user_id, embedding FROM chunks WHERE embedding IS NOT NULL"
-	args := []interface{}{}
+	args := []any{}
 
 	if len(opts.Scopes) > 0 {
 		placeholders := make([]string, len(opts.Scopes))
@@ -546,9 +546,9 @@ func (m *LongTermMemory) SearchKeyword(ctx context.Context, query string, opts *
 }
 
 // buildKeywordSearchQuery 构建关键词搜索查询。
-func (m *LongTermMemory) buildKeywordSearchQuery(query string, keywords []string, opts *SearchOptions) (string, []interface{}) {
+func (m *LongTermMemory) buildKeywordSearchQuery(_ string, keywords []string, opts *SearchOptions) (string, []any) {
 	likeConditions := make([]string, len(keywords))
-	args := []interface{}{}
+	args := []any{}
 	for _, kw := range keywords {
 		likeConditions = append(likeConditions, "text LIKE ?")
 		args = append(args, "%"+kw+"%")
@@ -792,8 +792,8 @@ func (m *LongTermMemory) updateFileMetadata(path string, source MemorySource, ha
 }
 
 // GetStats 返回记忆存储的统计信息。
-func (m *LongTermMemory) GetStats() (map[string]interface{}, error) {
-	stats := make(map[string]interface{})
+func (m *LongTermMemory) GetStats() (map[string]any, error) {
+	stats := make(map[string]any)
 
 	var chunksCount int
 	err := m.db.QueryRow(sqlCountFrom + "chunks").Scan(&chunksCount)

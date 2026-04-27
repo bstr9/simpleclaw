@@ -42,11 +42,11 @@ type LoginResponse struct {
 }
 
 type ConfigResponse struct {
-	Config map[string]interface{} `json:"config"`
+	Config map[string]any `json:"config"`
 }
 
 type UpdateConfigRequest struct {
-	Config map[string]interface{} `json:"config"`
+	Config map[string]any `json:"config"`
 }
 
 type ValidationResult struct {
@@ -83,7 +83,7 @@ type ChannelStatus struct {
 
 type APIResponse struct {
 	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    any `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
 	Code    int         `json:"code,omitempty"`
 }

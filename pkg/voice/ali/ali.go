@@ -158,7 +158,7 @@ func (e *Engine) TTS(ctx context.Context, text string) ([]byte, error) {
 	}
 
 	// 构建请求体
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"text":   text,
 		"appkey": e.appKey,
 		"token":  token,

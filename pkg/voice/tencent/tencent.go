@@ -113,7 +113,7 @@ func (e *Engine) TTS(ctx context.Context, text string) ([]byte, error) {
 	}
 
 	// 构建请求参数
-	params := map[string]interface{}{
+	params := map[string]any{
 		"Text":            text,
 		"SessionId":       fmt.Sprintf("%d", time.Now().Unix()),
 		"Volume":          5,
@@ -164,7 +164,7 @@ func (e *Engine) ASR(ctx context.Context, audio []byte) (string, error) {
 	base64Audio := base64.StdEncoding.EncodeToString(audio)
 
 	// 构建请求参数
-	params := map[string]interface{}{
+	params := map[string]any{
 		"ProjectId":      0,
 		"SubServiceType": 2,
 		"EngSerViceType": "16k_zh",
@@ -195,7 +195,7 @@ func (e *Engine) ASR(ctx context.Context, audio []byte) (string, error) {
 }
 
 // sendRequest 发送腾讯云API请求
-func (e *Engine) sendRequest(ctx context.Context, host, action string, params map[string]interface{}) ([]byte, error) {
+func (e *Engine) sendRequest(ctx context.Context, host, action string, params map[string]any) ([]byte, error) {
 	// 构建请求URL
 	requestURL := fmt.Sprintf("https://%s", host)
 

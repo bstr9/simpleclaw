@@ -128,7 +128,7 @@ type ttsParams struct {
 }
 
 // parseExtraParams 解析Extra配置参数
-func parseExtraParams(extra map[string]interface{}) ttsParams {
+func parseExtraParams(extra map[string]any) ttsParams {
 	params := ttsParams{
 		lang:   defaultLang,
 		ctp:    defaultCTP,
@@ -169,7 +169,7 @@ func parseExtraParams(extra map[string]interface{}) ttsParams {
 }
 
 // parseAppID 解析AppID
-func parseAppID(extra map[string]interface{}) string {
+func parseAppID(extra map[string]any) string {
 	if extra == nil {
 		return ""
 	}
@@ -274,7 +274,7 @@ func (e *BaiduEngine) longTextToSpeech(ctx context.Context, text string) ([]byte
 // createLongTTSTask 创建长文本TTS任务
 func (e *BaiduEngine) createLongTTSTask(ctx context.Context, token, text string) (int64, error) {
 	createURL := fmt.Sprintf("%s?access_token=%s", longTTSURL, token)
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"text":            text,
 		"format":          "mp3-16k",
 		"voice":           e.per,
@@ -346,7 +346,7 @@ func (e *BaiduEngine) pollLongTTSTask(ctx context.Context, token string, taskID 
 
 // queryLongTTSTask 查询长文本TTS任务状态
 func (e *BaiduEngine) queryLongTTSTask(ctx context.Context, queryURL string, taskID int64) (*LongTTSTaskInfo, error) {
-	queryPayload := map[string]interface{}{
+	queryPayload := map[string]any{
 		"task_ids": []int64{taskID},
 	}
 	queryBytes, _ := json.Marshal(queryPayload)

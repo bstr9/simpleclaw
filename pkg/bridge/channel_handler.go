@@ -89,7 +89,7 @@ func (h *channelMessageHandler) HandleMessage(ctx context.Context, msg types.Cha
 }
 
 // ProcessMessageWithStream 流式处理消息（兼容旧接口）
-func (h *channelMessageHandler) ProcessMessageWithStream(ctx context.Context, msg interface{}, onEvent func(event map[string]any)) (*types.Reply, error) {
+func (h *channelMessageHandler) ProcessMessageWithStream(ctx context.Context, msg any, onEvent func(event map[string]any)) (*types.Reply, error) {
 	chatMsg, ok := msg.(types.ChatMessage)
 	if !ok {
 		return nil, fmt.Errorf("invalid message type")

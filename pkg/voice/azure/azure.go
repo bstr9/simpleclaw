@@ -106,7 +106,7 @@ func buildLanguageVoices(extra map[string]any) map[string]string {
 		return languageVoices
 	}
 
-	voices, ok := extra["language_voices"].(map[string]interface{})
+	voices, ok := extra["language_voices"].(map[string]any)
 	if !ok {
 		return languageVoices
 	}

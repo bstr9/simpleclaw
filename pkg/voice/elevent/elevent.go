@@ -92,14 +92,14 @@ func (e *Engine) TTS(ctx context.Context, text string) ([]byte, error) {
 	url := fmt.Sprintf("%s/text-to-speech/%s", e.apiBase, e.voiceID)
 
 	// 构建请求体
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"text":  text,
 		"model": e.model,
 	}
 
 	// 添加语音设置
 	if e.config.Extra != nil {
-		if settings, ok := e.config.Extra["voice_settings"].(map[string]interface{}); ok {
+		if settings, ok := e.config.Extra["voice_settings"].(map[string]any); ok {
 			reqBody["voice_settings"] = settings
 		}
 	}

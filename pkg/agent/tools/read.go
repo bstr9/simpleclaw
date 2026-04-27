@@ -137,7 +137,7 @@ func (t *ReadTool) resolvePath(path string) string {
 	return filepath.ToSlash(abs)
 }
 
-func (t *ReadTool) processTextContent(content []byte, offset, limit int, displayPath string) map[string]any {
+func (t *ReadTool) processTextContent(content []byte, offset, limit int, _ string) map[string]any {
 	// 尝试解码为 UTF-8
 	text := string(content)
 	lines := strings.Split(text, "\n")

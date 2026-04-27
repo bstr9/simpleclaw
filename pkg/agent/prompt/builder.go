@@ -93,7 +93,7 @@ func BuildSystemPrompt(opts *BuildOptions) string {
 }
 
 // buildToolingSection 构建工具系统区块
-func buildToolingSection(tools []*ToolInfo, language string) []string {
+func buildToolingSection(tools []*ToolInfo, _ string) []string {
 	available := buildToolSummaryMap(tools)
 	toolLines := buildOrderedToolLines(available)
 
@@ -166,7 +166,7 @@ func formatToolLine(name, summary string) string {
 }
 
 // buildSkillsSection 构建技能系统区块
-func buildSkillsSection(skillsPrompt string, language string) []string {
+func buildSkillsSection(skillsPrompt string, _ string) []string {
 	lines := []string{
 		"## 技能系统（mandatory）",
 		"",
@@ -190,7 +190,7 @@ func buildSkillsSection(skillsPrompt string, language string) []string {
 }
 
 // buildMemorySection 构建记忆系统区块
-func buildMemorySection(language string) []string {
+func buildMemorySection(_ string) []string {
 	todayFile := time.Now().Format("2006-01-02") + ".md"
 
 	lines := []string{
@@ -233,7 +233,7 @@ func buildMemorySection(language string) []string {
 }
 
 // buildWorkspaceSection 构建工作空间区块
-func buildWorkspaceSection(workspaceDir string, language string) []string {
+func buildWorkspaceSection(workspaceDir string, _ string) []string {
 	lines := []string{
 		"## 工作空间",
 		"",
@@ -274,7 +274,7 @@ func buildWorkspaceSection(workspaceDir string, language string) []string {
 }
 
 // buildUserIdentitySection 构建用户身份区块
-func buildUserIdentitySection(user *UserInfo, language string) []string {
+func buildUserIdentitySection(user *UserInfo, _ string) []string {
 	if user == nil {
 		return nil
 	}
@@ -303,7 +303,7 @@ func buildUserIdentitySection(user *UserInfo, language string) []string {
 }
 
 // buildContextFilesSection 构建项目上下文文件区块
-func buildContextFilesSection(files []*ContextFile, language string) []string {
+func buildContextFilesSection(files []*ContextFile, _ string) []string {
 	if len(files) == 0 {
 		return nil
 	}
@@ -342,7 +342,7 @@ func buildContextFilesSection(files []*ContextFile, language string) []string {
 }
 
 // buildRuntimeSection 构建运行时信息区块
-func buildRuntimeSection(runtime *RuntimeInfo, language string) []string {
+func buildRuntimeSection(runtime *RuntimeInfo, _ string) []string {
 	if runtime == nil {
 		return nil
 	}

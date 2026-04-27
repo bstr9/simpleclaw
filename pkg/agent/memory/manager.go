@@ -136,7 +136,7 @@ func (m *Manager) AddMessage(ctx context.Context, sessionID string, msg *Message
 
 	// 添加到会话记忆
 	if m.conversation != nil && sessionID != "" {
-		messages := []map[string]interface{}{
+		messages := []map[string]any{
 			{
 				"role":    string(msg.Role),
 				"content": msg.Content,
@@ -171,7 +171,7 @@ func (m *Manager) Search(ctx context.Context, query string, opts *SearchOptions)
 }
 
 // GetSessionMessages 获取会话消息历史
-func (m *Manager) GetSessionMessages(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
+func (m *Manager) GetSessionMessages(ctx context.Context, sessionID string, limit int) ([]map[string]any, error) {
 	if m.conversation == nil {
 		return nil, fmt.Errorf("会话记忆未初始化")
 	}
@@ -246,8 +246,8 @@ func (m *Manager) Close() error {
 }
 
 // GetStats 获取内存统计信息
-func (m *Manager) GetStats(ctx context.Context) map[string]interface{} {
-	stats := map[string]interface{}{
+func (m *Manager) GetStats(ctx context.Context) map[string]any {
+	stats := map[string]any{
 		"workspace": m.workspace,
 	}
 

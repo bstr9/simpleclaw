@@ -39,7 +39,7 @@ type ConversationMessage struct {
 type DisplayTurn struct {
 	Role      string                   `json:"role"`
 	Content   string                   `json:"content"`
-	ToolCalls []map[string]interface{} `json:"tool_calls,omitempty"`
+	ToolCalls []map[string]any `json:"tool_calls,omitempty"`
 	CreatedAt int64                    `json:"created_at,omitempty"`
 }
 
@@ -132,7 +132,7 @@ type loadMsgRow struct {
 }
 
 // LoadMessages 加载指定会话的最近消息。
-func (s *ConversationStore) LoadMessages(ctx context.Context, sessionID string, maxTurns int) ([]map[string]interface{}, error) {
+func (s *ConversationStore) LoadMessages(ctx context.Context, sessionID string, maxTurns int) ([]map[string]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -201,15 +201,15 @@ func (s *ConversationStore) collectVisibleTurnSeqs(rows []loadMsgRow) []int {
 }
 
 // buildMessagesResult 构建消息结果。
-func (s *ConversationStore) buildMessagesResult(rows []loadMsgRow, cutoffSeq *int) []map[string]interface{} {
-	var result []map[string]interface{}
+func (s *ConversationStore) buildMessagesResult(rows []loadMsgRow, cutoffSeq *int) []map[string]any {
+	var result []map[string]any
 	for i := len(rows) - 1; i >= 0; i-- {
 		r := rows[i]
 		if cutoffSeq != nil && r.seq < *cutoffSeq {
 			continue
 		}
 		content := s.parseContent(r.content)
-		result = append(result, map[string]interface{}{
+		result = append(result, map[string]any{
 			"role":    r.role,
 			"content": content,
 		})
@@ -218,8 +218,8 @@ func (s *ConversationStore) buildMessagesResult(rows []loadMsgRow, cutoffSeq *in
 }
 
 // parseContent 解析消息内容。
-func (s *ConversationStore) parseContent(content string) interface{} {
-	var parsed interface{}
+func (s *ConversationStore) parseContent(content string) any {
+	var parsed any
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
 		return content
 	}
@@ -227,7 +227,7 @@ func (s *ConversationStore) parseContent(content string) interface{} {
 }
 
 // AppendMessages 追加消息到会话。
-func (s *ConversationStore) AppendMessages(ctx context.Context, sessionID, channelType string, messages []map[string]interface{}) error {
+func (s *ConversationStore) AppendMessages(ctx context.Context, sessionID, channelType string, messages []map[string]any) error {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -360,7 +360,7 @@ func (s *ConversationStore) CleanupOldSessions(ctx context.Context, maxAgeDays i
 }
 
 // LoadHistoryPage 加载分页的历史记录用于 UI 显示。
-func (s *ConversationStore) LoadHistoryPage(ctx context.Context, sessionID string, page, pageSize int) (map[string]interface{}, error) {
+func (s *ConversationStore) LoadHistoryPage(ctx context.Context, sessionID string, page, pageSize int) (map[string]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -439,8 +439,8 @@ func reverseDisplayTurns(turns []DisplayTurn) []DisplayTurn {
 }
 
 // buildHistoryPageResult 构建历史页面结果。
-func buildHistoryPageResult(pageItems []DisplayTurn, total, page, pageSize int) map[string]interface{} {
-	return map[string]interface{}{
+func buildHistoryPageResult(pageItems []DisplayTurn, total, page, pageSize int) map[string]any {
+	return map[string]any{
 		"messages":  pageItems,
 		"total":     total,
 		"page":      page,
@@ -450,7 +450,7 @@ func buildHistoryPageResult(pageItems []DisplayTurn, total, page, pageSize int) 
 }
 
 // GetStats 获取存储统计信息。
-func (s *ConversationStore) GetStats(ctx context.Context) (map[string]interface{}, error) {
+func (s *ConversationStore) GetStats(ctx context.Context) (map[string]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -488,7 +488,7 @@ func (s *ConversationStore) GetStats(ctx context.Context) (map[string]interface{
 		byChannel[channelType] = cnt
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_sessions": totalSessions,
 		"total_messages": totalMessages,
 		"by_channel":     byChannel,
@@ -507,13 +507,13 @@ func (s *ConversationStore) Close() error {
 }
 
 // isVisibleUserMessage 判断是否为可见的用户消息。
-func (s *ConversationStore) isVisibleUserMessage(content interface{}) bool {
+func (s *ConversationStore) isVisibleUserMessage(content any) bool {
 	switch c := content.(type) {
 	case string:
 		return len(c) > 0
-	case []interface{}:
+	case []any:
 		for _, b := range c {
-			if bm, ok := b.(map[string]interface{}); ok {
+			if bm, ok := b.(map[string]any); ok {
 				if t, ok := bm["type"].(string); ok && t == "text" {
 					return true
 				}
@@ -526,21 +526,21 @@ func (s *ConversationStore) isVisibleUserMessage(content interface{}) bool {
 }
 
 // extractDisplayText 提取可显示文本。
-func (s *ConversationStore) extractDisplayText(content interface{}) string {
+func (s *ConversationStore) extractDisplayText(content any) string {
 	switch c := content.(type) {
 	case string:
 		return c
-	case []interface{}:
+	case []any:
 		return extractTextFromBlocks(c)
 	default:
 		return ""
 	}
 }
 
-func extractTextFromBlocks(blocks []interface{}) string {
+func extractTextFromBlocks(blocks []any) string {
 	var parts []string
 	for _, b := range blocks {
-		bm, ok := b.(map[string]interface{})
+		bm, ok := b.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -554,16 +554,16 @@ func extractTextFromBlocks(blocks []interface{}) string {
 }
 
 // extractToolCalls 提取工具调用信息。
-func (s *ConversationStore) extractToolCalls(content interface{}) []map[string]interface{} {
-	result := []map[string]interface{}{}
-	c, ok := content.([]interface{})
+func (s *ConversationStore) extractToolCalls(content any) []map[string]any {
+	result := []map[string]any{}
+	c, ok := content.([]any)
 	if !ok {
 		return result
 	}
 	for _, b := range c {
-		if bm, ok := b.(map[string]interface{}); ok {
+		if bm, ok := b.(map[string]any); ok {
 			if t, ok := bm["type"].(string); ok && t == "tool_use" {
-				tc := map[string]interface{}{
+				tc := map[string]any{
 					"id":        bm["id"],
 					"name":      bm["name"],
 					"arguments": bm["input"],
@@ -576,9 +576,9 @@ func (s *ConversationStore) extractToolCalls(content interface{}) []map[string]i
 }
 
 // extractToolResults 提取工具结果。
-func (s *ConversationStore) extractToolResults(content interface{}) map[string]string {
+func (s *ConversationStore) extractToolResults(content any) map[string]string {
 	result := make(map[string]string)
-	blocks, ok := content.([]interface{})
+	blocks, ok := content.([]any)
 	if !ok {
 		return result
 	}
@@ -590,8 +590,8 @@ func (s *ConversationStore) extractToolResults(content interface{}) map[string]s
 }
 
 // extractToolResultFromBlock 从单个块中提取工具结果。
-func (s *ConversationStore) extractToolResultFromBlock(b interface{}, result map[string]string) {
-	bm, ok := b.(map[string]interface{})
+func (s *ConversationStore) extractToolResultFromBlock(b any, result map[string]string) {
+	bm, ok := b.(map[string]any)
 	if !ok {
 		return
 	}
@@ -606,11 +606,11 @@ func (s *ConversationStore) extractToolResultFromBlock(b interface{}, result map
 }
 
 // extractToolResultContent 提取工具结果内容。
-func (s *ConversationStore) extractToolResultContent(content interface{}) string {
+func (s *ConversationStore) extractToolResultContent(content any) string {
 	switch rct := content.(type) {
 	case string:
 		return rct
-	case []interface{}:
+	case []any:
 		return s.extractTextFromToolResultBlocks(rct)
 	default:
 		return ""
@@ -618,7 +618,7 @@ func (s *ConversationStore) extractToolResultContent(content interface{}) string
 }
 
 // extractTextFromToolResultBlocks 从工具结果块中提取文本。
-func (s *ConversationStore) extractTextFromToolResultBlocks(blocks []interface{}) string {
+func (s *ConversationStore) extractTextFromToolResultBlocks(blocks []any) string {
 	var parts []string
 	for _, rb := range blocks {
 		text := s.extractTextFromResultBlock(rb)
@@ -630,8 +630,8 @@ func (s *ConversationStore) extractTextFromToolResultBlocks(blocks []interface{}
 }
 
 // extractTextFromResultBlock 从单个结果块提取文本。
-func (s *ConversationStore) extractTextFromResultBlock(rb interface{}) string {
-	rbm, ok := rb.(map[string]interface{})
+func (s *ConversationStore) extractTextFromResultBlock(rb any) string {
+	rbm, ok := rb.(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -655,12 +655,12 @@ type rawMsgRow struct {
 // msgGroup 表示消息分组。
 type msgGroup struct {
 	user *struct {
-		content   interface{}
+		content   any
 		createdAt int64
 	}
 	rest []struct {
 		role      string
-		content   interface{}
+		content   any
 		createdAt int64
 	}
 }
@@ -684,7 +684,7 @@ func (s *ConversationStore) groupMessages(rows []rawMsgRow) []msgGroup {
 }
 
 // processRowForGrouping 处理单行消息的分组逻辑。
-func (s *ConversationStore) processRowForGrouping(groups *msgGroupBuilder, r rawMsgRow, content interface{}) {
+func (s *ConversationStore) processRowForGrouping(groups *msgGroupBuilder, r rawMsgRow, content any) {
 	if r.role == "user" && s.isVisibleUserMessage(content) {
 		groups.StartNewGroup(content, r.createdAt)
 	} else {
@@ -697,23 +697,23 @@ type msgGroupBuilder struct {
 	groups  []msgGroup
 	started bool
 	curUser *struct {
-		content   interface{}
+		content   any
 		createdAt int64
 	}
 	curRest []struct {
 		role      string
-		content   interface{}
+		content   any
 		createdAt int64
 	}
 }
 
 // StartNewGroup 开始新的分组。
-func (b *msgGroupBuilder) StartNewGroup(content interface{}, createdAt int64) {
+func (b *msgGroupBuilder) StartNewGroup(content any, createdAt int64) {
 	if b.started {
 		b.groups = append(b.groups, msgGroup{user: b.curUser, rest: b.curRest})
 	}
 	b.curUser = &struct {
-		content   interface{}
+		content   any
 		createdAt int64
 	}{content: content, createdAt: createdAt}
 	b.curRest = nil
@@ -721,10 +721,10 @@ func (b *msgGroupBuilder) StartNewGroup(content interface{}, createdAt int64) {
 }
 
 // AddRest 添加非用户消息到当前分组。
-func (b *msgGroupBuilder) AddRest(role string, content interface{}, createdAt int64) {
+func (b *msgGroupBuilder) AddRest(role string, content any, createdAt int64) {
 	b.curRest = append(b.curRest, struct {
 		role      string
-		content   interface{}
+		content   any
 		createdAt int64
 	}{role: role, content: content, createdAt: createdAt})
 }
@@ -767,7 +767,7 @@ func (s *ConversationStore) appendUserTurn(turns []DisplayTurn, g msgGroup) []Di
 
 // appendAssistantTurn 添加助手轮次。
 func (s *ConversationStore) appendAssistantTurn(turns []DisplayTurn, g msgGroup) []DisplayTurn {
-	var allToolCalls []map[string]interface{}
+	var allToolCalls []map[string]any
 	toolResults := make(map[string]string)
 	var finalText string
 	var finalTS int64
@@ -802,9 +802,9 @@ func (s *ConversationStore) appendAssistantTurn(turns []DisplayTurn, g msgGroup)
 // collectRestContent 收集 rest 消息内容。
 func (s *ConversationStore) collectRestContent(r struct {
 	role      string
-	content   interface{}
+	content   any
 	createdAt int64
-}, allToolCalls *[]map[string]interface{}, toolResults map[string]string, finalText *string, finalTS *int64) {
+}, allToolCalls *[]map[string]any, toolResults map[string]string, finalText *string, finalTS *int64) {
 	if r.role == "user" {
 		for k, v := range s.extractToolResults(r.content) {
 			toolResults[k] = v

@@ -413,7 +413,7 @@ func (m *ShortTermMemory) Close() error {
 }
 
 // Stats 返回记忆的统计信息。
-func (m *ShortTermMemory) Stats() map[string]interface{} {
+func (m *ShortTermMemory) Stats() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -428,7 +428,7 @@ func (m *ShortTermMemory) Stats() map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"session_id":         m.sessionID,
 		"user_id":            m.userID,
 		"total_messages":     len(m.messages),

@@ -502,7 +502,7 @@ func (e *Engine) buildASRFrameRequest(appID string, business asrBusinessRequest,
 // mergeASRResults 合并 ASR 识别结果
 func (e *Engine) mergeASRResults(resultMap *sync.Map) (string, error) {
 	var keys []int
-	resultMap.Range(func(key, value interface{}) bool {
+	resultMap.Range(func(key, value any) bool {
 		k := key.(int)
 		keys = append(keys, k)
 		return true

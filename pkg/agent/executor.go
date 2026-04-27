@@ -91,7 +91,7 @@ func (e *executor) handleLLMError(err error, step int) (string, error) {
 }
 
 // logResponse 记录 LLM 响应日志
-func (e *executor) logResponse(response *llm.Response, step int) {
+func (e *executor) logResponse(response *llm.Response, _ int) {
 	logger.Info("LLM response received",
 		zap.Int("content_length", len(response.Content)),
 		zap.Int("tool_calls_count", len(response.ToolCalls)),
@@ -339,7 +339,7 @@ func (e *executor) processToolCalls(ctx context.Context, toolCalls []llm.ToolCal
 }
 
 // executeTool 执行单个工具
-func (e *executor) executeTool(ctx context.Context, toolCall llm.ToolCall) (*ToolResult, error) {
+func (e *executor) executeTool(_ context.Context, toolCall llm.ToolCall) (*ToolResult, error) {
 	tool, ok := e.agent.toolRegistry.Get(toolCall.Function.Name)
 	if !ok {
 		return nil, fmt.Errorf("tool not found: %s", toolCall.Function.Name)

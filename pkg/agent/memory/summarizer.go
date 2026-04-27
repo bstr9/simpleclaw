@@ -184,11 +184,11 @@ func (m *MemoryFlushManager) GetMainMemoryFile(userID string) string {
 }
 
 // GetStatus 返回刷新管理器的状态。
-func (m *MemoryFlushManager) GetStatus() map[string]interface{} {
+func (m *MemoryFlushManager) GetStatus() map[string]any {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"today_file": "",
 		"main_file":  m.GetMainMemoryFile(""),
 	}

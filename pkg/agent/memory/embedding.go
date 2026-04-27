@@ -112,7 +112,7 @@ func NewOpenAIEmbeddingProvider(model, apiKey string, opts ...OpenAIEmbeddingOpt
 
 // EmbeddingRequest 表示 OpenAI 嵌入 API 的请求体。
 type EmbeddingRequest struct {
-	Input interface{} `json:"input"` // 可以是字符串或字符串数组
+	Input any `json:"input"` // 可以是字符串或字符串数组
 	Model string      `json:"model"`
 }
 

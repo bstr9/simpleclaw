@@ -13,7 +13,7 @@ import (
 
 // FileSize 获取文件大小
 // 支持 *os.File、[]byte、io.ReadSeeker 等类型
-func FileSize(file interface{}) (int64, error) {
+func FileSize(file any) (int64, error) {
 	switch f := file.(type) {
 	case *os.File:
 		info, err := f.Stat()

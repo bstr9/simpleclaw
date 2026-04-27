@@ -219,7 +219,7 @@ func (h *HTTPHandler) shouldProcessGroupMessage(msg *Message, feishuMsg *FeishuM
 func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, message string) {
 	w.Header().Set(common.HeaderContentType, common.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
 		"message": message,
 	})
@@ -229,7 +229,7 @@ func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, message string) {
 func (h *HTTPHandler) writeError(w http.ResponseWriter, code int, message string) {
 	w.Header().Set(common.HeaderContentType, common.ContentTypeJSON)
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"success": false,
 		"error":   message,
 	})

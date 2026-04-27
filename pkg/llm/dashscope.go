@@ -200,7 +200,7 @@ type dashScopeRequest struct {
 	Model      string                 `json:"model"`
 	Input      dashScopeInput         `json:"input"`
 	Parameters dashScopeParameters    `json:"parameters,omitempty"`
-	Debug      map[string]interface{} `json:"debug,omitempty"`
+	Debug      map[string]any `json:"debug,omitempty"`
 }
 
 // dashScopeInput 表示输入内容
@@ -211,7 +211,7 @@ type dashScopeInput struct {
 // dashScopeMessage 表示单条消息
 type dashScopeMessage struct {
 	Role       string              `json:"role"`
-	Content    interface{}         `json:"content"` // 可以是字符串或数组（多模态）
+	Content    any         `json:"content"` // 可以是字符串或数组（多模态）
 	Name       string              `json:"name,omitempty"`
 	ToolCalls  []dashScopeToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string              `json:"tool_call_id,omitempty"`
@@ -245,11 +245,11 @@ type dashScopeParameters struct {
 	MaxTokens         int                    `json:"max_tokens,omitempty"`
 	Stop              []string               `json:"stop,omitempty"`
 	Tools             []dashScopeTool        `json:"tools,omitempty"`
-	ToolChoice        interface{}            `json:"tool_choice,omitempty"`
+	ToolChoice        any            `json:"tool_choice,omitempty"`
 	EnableThinking    bool                   `json:"enable_thinking,omitempty"`
 	ThinkingBudget    int                    `json:"thinking_budget,omitempty"`
 	IncrementalOutput bool                   `json:"incremental_output,omitempty"`
-	Extra             map[string]interface{} `json:",omitempty"` // 额外参数
+	Extra             map[string]any `json:",omitempty"` // 额外参数
 }
 
 // dashScopeTool 表示工具定义
@@ -262,7 +262,7 @@ type dashScopeTool struct {
 type dashScopeFunctionDef struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
-	Parameters  interface{} `json:"parameters,omitempty"`
+	Parameters  any `json:"parameters,omitempty"`
 }
 
 // dashScopeResponse 表示 DashScope API 响应
@@ -783,7 +783,7 @@ func (m *DashScopeModel) convertMessages(messages []Message) []dashScopeMessage 
 }
 
 // extractContent 从消息内容中提取文本
-func (m *DashScopeModel) extractContent(content interface{}) string {
+func (m *DashScopeModel) extractContent(content any) string {
 	if content == nil {
 		return ""
 	}
@@ -791,11 +791,11 @@ func (m *DashScopeModel) extractContent(content interface{}) string {
 	switch v := content.(type) {
 	case string:
 		return v
-	case []interface{}:
+	case []any:
 		// 多模态模型返回的内容块数组
 		var result string
 		for _, item := range v {
-			if block, ok := item.(map[string]interface{}); ok {
+			if block, ok := item.(map[string]any); ok {
 				if text, ok := block["text"].(string); ok {
 					result += text
 				}

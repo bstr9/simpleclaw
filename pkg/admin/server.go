@@ -300,7 +300,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 	cfg := config.Get()
 	masked := cfg.MaskSensitive()
 

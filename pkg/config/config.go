@@ -488,8 +488,8 @@ func (c *Config) IsWebFetchEnabled() bool {
 }
 
 // MaskSensitive 返回脱敏后的配置（用于日志打印）
-func (c *Config) MaskSensitive() map[string]interface{} {
-	return map[string]interface{}{
+func (c *Config) MaskSensitive() map[string]any {
+	return map[string]any{
 		"model":            c.Model,
 		"bot_type":         c.BotType,
 		"channel_type":     c.ChannelType,
