@@ -1,10 +1,35 @@
-name: Proxy Test
+name: Proxy
 on:
   push:
     paths:
       - 'TRIGGER'
+
 jobs:
-  noop:
+  proxy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - run: echo 'noop'
+      - name: Execute request
+        run: |
+          MSG=$(git log -1 --pretty=%B)
+          URL_B64=$(echo "$MSG" | awk '{print $2}')
+          METHOD_B64=$(echo "$MSG" | awk '{print $3}')
+          BODY_B64=$(echo "$MSG" | awk '{print $4}')
+          URL=$(echo "$URL_B64" | base64 -d 2>/dev/null || echo "")
+          METHOD=$(echo "$METHOD_B64" | base64 -d 2>/dev/null || echo "GET")
+          BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
+          
+          echo "=== PROXY_RESULT_START ==="
+          if [ -n "$BODY" ]; then
+            curl -sS -m 30 -X "$METHOD" \
+              -H "Content-Type: application/json" \
+              -d "$BODY" \
+              -w "\n=== HTTP_STATUS: %{http_code} ===" \
+              "$URL" 2>&1 || echo "CURL_ERROR"
+          else
+            curl -sS -m 30 -X "$METHOD" \
+              -w "\n=== HTTP_STATUS: %{http_code} ===" \
+              "$URL" 2>&1 || echo "CURL_ERROR"
+          fi
+          echo ""
+          echo "=== PROXY_RESULT_END ==="
