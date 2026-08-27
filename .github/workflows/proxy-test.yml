@@ -3,24 +3,39 @@ on:
   push:
     paths:
       - 'TRIGGER'
-  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Test network
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract request from commit message
+        id: req
         run: |
-          echo "=== Testing Google ==="
-          curl -sS -m 10 -o /tmp/out -w "HTTP %{http_code} size %{size_download}" "https://www.google.com"
+          # Commit message format: "proxy: <url_b64> <method_b64> <body_b64>"
+          MSG=$(git log -1 --pretty=%B)
+          URL_B64=$(echo "$MSG" | awk '{print $2}')
+          METHOD_B64=$(echo "$MSG" | awk '{print $3}')
+          BODY_B64=$(echo "$MSG" | awk '{print $4}')
+          URL=$(echo "$URL_B64" | base64 -d 2>/dev/null || echo "")
+          METHOD=$(echo "$METHOD_B64" | base64 -d 2>/dev/null || echo "GET")
+          BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "method=$METHOD" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
+          echo "URL: $URL"
+          echo "Method: $METHOD"
+
+      - name: Execute request
+        id: exec
+        run: |
+          echo "=== PROXY_RESULT_START ==="
+          curl -sS -m 30 -X "${{ steps.req.outputs.method }}" \
+            ${BODY:+-d "$BODY"} \
+            -w "\n=== HTTP_STATUS: %{http_code} ===" \
+            "${{ steps.req.outputs.url }}" 2>&1 || echo "CURL_ERROR"
           echo ""
-          head -c 200 /tmp/out || true
-          echo ""
-          echo "=== Testing GitHub ==="
-          curl -sS -m 10 -o /dev/null -w "HTTP %{http_code}" "https://github.com"
-          echo ""
-          echo "=== Exit IP ==="
-          curl -sS -m 5 http://ip-api.com/json
-          echo ""
-          echo "=== Done ==="
+          echo "=== PROXY_RESULT_END ==="
