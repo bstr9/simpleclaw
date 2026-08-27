@@ -1,59 +1,26 @@
 name: Proxy Test
 on:
+  push:
+    paths:
+      - 'TRIGGER'
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'Action: serve or test'
-        required: true
-        default: 'test'
-      target:
-        description: 'Target URL or port'
-        required: false
-        default: 'https://www.google.com'
 
 jobs:
-  proxy:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Test network
-        if: inputs.action == 'test'
         run: |
-          echo "=== Testing ${{ inputs.target }} ==="
-          curl -sS -m 10 -o /tmp/out -w "HTTP %{http_code} size %{size_download} time %{time_total}s\n" "${{ inputs.target }}"
-          echo "=== Content ==="
-          head -c 2000 /tmp/out || true
+          echo "=== Testing Google ==="
+          curl -sS -m 10 -o /tmp/out -w "HTTP %{http_code} size %{size_download}" "https://www.google.com"
           echo ""
-          echo "=== IP ==="
-          curl -sS -m 5 http://ip-api.com/json || true
+          head -c 200 /tmp/out || true
           echo ""
-
-      - name: Serve proxy
-        if: inputs.action == 'serve'
-        run: |
-          echo "=== Starting SOCKS5 proxy on port ${{ inputs.target }} ==="
-          # Install sing-box
-          wget -q https://github.com/SagerNet/sing-box/releases/download/v1.13.19/sing-box-1.13.19-linux-amd64.tar.gz -O /tmp/sb.tar.gz
-          tar xzf /tmp/sb.tar.gz -C /tmp/
-          # Create config
-          cat > /tmp/config.json << 'CFG'
-          {
-            "inbounds": [{
-              "type": "mixed",
-              "tag": "in",
-              "listen": "0.0.0.0",
-              "listen_port": 8080
-            }],
-            "outbounds": [
-              {"type": "direct", "tag": "direct"}
-            ]
-          }
-          CFG
-          # Run proxy
-          /tmp/sing-box-*/sing-box run -c /tmp/config.json &
-          # Keep alive and log
-          echo "Proxy running on 0.0.0.0:8080"
-          for i in $(seq 1 1800); do
-            echo "heartbeat $i"
-            sleep 10
-          done
+          echo "=== Testing GitHub ==="
+          curl -sS -m 10 -o /dev/null -w "HTTP %{http_code}" "https://github.com"
+          echo ""
+          echo "=== Exit IP ==="
+          curl -sS -m 5 http://ip-api.com/json
+          echo ""
+          echo "=== Done ==="
