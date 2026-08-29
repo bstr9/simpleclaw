@@ -9,6 +9,8 @@ jobs:
   proxy:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,13 +22,28 @@ jobs:
           echo "CMD=$(echo "$MSG" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "URL=$(echo "$MSG" | cut -d' ' -f2-)" >> $GITHUB_OUTPUT
 
-      - name: Download to file
-        if: steps.parse.outputs.CMD == 'dlart'
+      - name: Download file
+        if: steps.parse.outputs.CMD == 'dlrel'
         run: |
           URL="${{ steps.parse.outputs.URL }}"
-          wget -q -T 120 --tries=3 "$URL" -O /tmp/payload.bin
+          wget -q -T 300 --tries=3 "$URL" -O /tmp/payload.bin
           echo "size: $(stat -c%s /tmp/payload.bin)"
           sha256sum /tmp/payload.bin
+
+      - name: Ensure release
+        if: steps.parse.outputs.CMD == 'dlrel'
+        run: |
+          gh release view dlpipe --repo ${{ github.repository }} >/dev/null 2>&1 || \
+            gh release create dlpipe --repo ${{ github.repository }} -t "pipeline" -n "auto"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload to release
+        if: steps.parse.outputs.CMD == 'dlrel'
+        run: |
+          gh release upload dlpipe /tmp/payload.bin --repo ${{ github.repository }} --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Upload artifact
         if: steps.parse.outputs.CMD == 'dlart'
