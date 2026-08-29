@@ -25,7 +25,7 @@ jobs:
           BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
 
           if [ "$CMD" = "pxb64:" ]; then
-            echo "URL_LEN: ${#URL} CMD: $CMD"
+            echo "URL_LEN: ${#URL} CMD: $CMD"; echo -n "$URL" | xxd | head -8
             curl -sS -m 60 -X "$METHOD" "$URL" -o /tmp/dl.bin; echo "CURL_EXIT: $?"
             ls -la /tmp/dl.bin
             base64 -w 76 /tmp/dl.bin
