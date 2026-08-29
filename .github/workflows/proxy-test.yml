@@ -38,10 +38,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Upload to release
+      - name: Split and upload to release
         if: steps.parse.outputs.CMD == 'dlrel'
         run: |
-          gh release upload dlpipe /tmp/payload.bin --repo ${{ github.repository }} --clobber
+          cd /tmp && split -b 1500M -d -a 2 payload.bin "part_"
+          for f in /tmp/part_*; do
+            gh release upload dlpipe "$f" --repo ${{ github.repository }} --clobber
+          done
+          sha256sum payload.bin | head -c 64 > /tmp/sum.txt
+          gh release upload dlpipe /tmp/sum.txt --repo ${{ github.repository }} --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
