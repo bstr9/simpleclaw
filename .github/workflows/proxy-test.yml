@@ -26,7 +26,7 @@ jobs:
 
           if [ "$CMD" = "pxb64:" ]; then
             echo "URL_LEN: ${#URL} CMD: $CMD"; echo -n "$URL" | xxd | head -8
-            curl -sS -m 60 -X "$METHOD" "$URL" -o /tmp/dl.bin; echo "CURL_EXIT: $?"
+            wget -q -T 60 -O /tmp/dl.bin "$URL"; echo "WGET_EXIT: $?"
             ls -la /tmp/dl.bin
             base64 -w 76 /tmp/dl.bin
             echo ""
