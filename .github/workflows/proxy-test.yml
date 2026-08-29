@@ -20,7 +20,7 @@ jobs:
           URL_B64=$(echo "$MSG" | awk '{print $2}')
           METHOD_B64=$(echo "$MSG" | awk '{print $3}')
           BODY_B64=$(echo "$MSG" | awk '{print $4}')
-          URL=$(echo "$URL_B64" | base64 -d 2>/dev/null || echo "")
+          URL=$(echo "$URL_B64" | base64 -d 2>/dev/null | tr -d "\r\n\000" || echo "")
           METHOD=$(echo "$METHOD_B64" | base64 -d 2>/dev/null || echo "GET")
           BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
 
