@@ -8,41 +8,36 @@ on:
 jobs:
   proxy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Execute request
+      - name: Parse request
+        id: parse
         run: |
-          MSG=$(git log -1 --pretty=%B)
-          CMD=$(echo "$MSG" | awk '{print $1}')
-          URL_B64=$(echo "$MSG" | awk '{print $2}')
-          METHOD_B64=$(echo "$MSG" | awk '{print $3}')
-          BODY_B64=$(echo "$MSG" | awk '{print $4}')
-          URL=$(echo "$URL_B64" | base64 -d 2>/dev/null | tr -d "\r\n\000" || echo "")
-          METHOD=$(echo "$METHOD_B64" | base64 -d 2>/dev/null || echo "GET")
-          BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
+          MSG="$(git log -1 --pretty=%B | tr -d '\r' | head -1)"
+          echo "CMD=$(echo "$MSG" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "URL=$(echo "$MSG" | cut -d' ' -f2-)" >> $GITHUB_OUTPUT
 
-          if [ "$CMD" = "pxb64:" ]; then
-            echo "=== B64_RESULT_START ==="
-            wget -q -T 90 -O /tmp/dl.bin "$URL"; echo "WGET_EXIT: $?"
-            base64 -w 76 /tmp/dl.bin
-            echo ""
-            echo "=== B64_RESULT_END ==="
-          else
-            echo "=== PROXY_RESULT_START ==="
-            if [ -n "$BODY" ]; then
-              curl -sS -m 30 -X "$METHOD" \
-                -H "Content-Type: application/json" \
-                -d "$BODY" \
-                -w "\n=== HTTP_STATUS: %{http_code} ===" \
-                "$URL" 2>&1 || echo "CURL_ERROR"
-            else
-              curl -sS -m 30 -X "$METHOD" \
-                -w "\n=== HTTP_STATUS: %{http_code} ===" \
-                "$URL" 2>&1 || echo "CURL_ERROR"
-            fi
-            echo ""
-            echo "=== PROXY_RESULT_END ==="
-          fi
+      - name: Download to file
+        if: steps.parse.outputs.CMD == 'dlart'
+        run: |
+          URL="${{ steps.parse.outputs.URL }}"
+          wget -q -T 120 --tries=3 "$URL" -O /tmp/payload.bin
+          echo "size: $(stat -c%s /tmp/payload.bin)"
+          sha256sum /tmp/payload.bin
+
+      - name: Upload artifact
+        if: steps.parse.outputs.CMD == 'dlart'
+        uses: actions/upload-artifact@v4
+        with:
+          name: payload
+          path: /tmp/payload.bin
+          retention-days: 1
+
+      - name: Text request
+        if: steps.parse.outputs.CMD == 'px'
+        run: |
+          URL="${{ steps.parse.outputs.URL }}"
+          curl -sS -m 60 "$URL"
