@@ -25,9 +25,8 @@ jobs:
           BODY=$(echo "$BODY_B64" | base64 -d 2>/dev/null || echo "")
 
           if [ "$CMD" = "pxb64:" ]; then
-            echo "URL_LEN: ${#URL} CMD: $CMD"; echo -n "$URL" | xxd | head -8
-            wget -q -T 60 -O /tmp/dl.bin "$URL"; echo "WGET_EXIT: $?"
-            ls -la /tmp/dl.bin
+            echo "=== B64_RESULT_START ==="
+            wget -q -T 90 -O /tmp/dl.bin "$URL"; echo "WGET_EXIT: $?"
             base64 -w 76 /tmp/dl.bin
             echo ""
             echo "=== B64_RESULT_END ==="
