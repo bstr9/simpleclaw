@@ -47,7 +47,7 @@ jobs:
 
       - name: Download and convert trades to 1s OHLCV
         run: |
-          mkdir -p btc_1s
+          mkdir -p "$GITHUB_WORKSPACE/btc_1s"
           echo "YEAR=$YEAR, MONTHS=$MONTHS"
           IFS=',' read -ra MONTH_ARR <<< "$MONTHS"
           for MONTH in "${MONTH_ARR[@]}"; do
@@ -67,11 +67,11 @@ jobs:
             ls -la "$CSV"
             OUT_NAME="btcusdt_1s_${YEAR}-${M}.parquet"
             python3 "$GITHUB_WORKSPACE/convert.py" "$CSV" "/tmp/${OUT_NAME}"
-            cp "/tmp/${OUT_NAME}" btc_1s/
+            cp "/tmp/${OUT_NAME}" "$GITHUB_WORKSPACE/btc_1s/"
             rm -f "/tmp/${FILE}" "/tmp/${CSV}" "/tmp/${OUT_NAME}"
             cd "$GITHUB_WORKSPACE"
           done
-          ls -la btc_1s/
+          ls -la "$GITHUB_WORKSPACE/btc_1s/"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -86,7 +86,7 @@ jobs:
           echo "done_${YEAR}_${MONTHS}=$(date +%s)" > BTC_BATCH_DONE
           git config user.name "data-bot"
           git config user.email "bot@actions.local"
-          git add btc_1s/ BTC_BATCH_DONE
+          git add "$GITHUB_WORKSPACE/btc_1s/" BTC_BATCH_DONE
           git commit -q -m "results ${YEAR}-${MONTHS}" || echo "nothing"
           git push -q origin main || (git pull -q --rebase origin main && git push -q origin main)
           echo "DONE - results committed to repo btc_1s/"
