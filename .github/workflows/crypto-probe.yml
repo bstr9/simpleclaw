@@ -1,0 +1,25 @@
+name: Crypto Data Probe
+
+on:
+  push:
+    paths:
+      - 'CRYPTO_REQ'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check Binance availability
+        run: |
+          echo "=== Binance API ping ==="
+          curl -s --max-time 10 "https://api.binance.com/api/v3/ping" && echo " OK"
+          echo
+          echo "=== BTCUSDT trades monthly files (earliest) ==="
+          curl -s --max-time 15 "https://data.binance.vision/?prefix=data/spot/monthly/trades/BTCUSDT/" | grep -oE 'trades/BTCUSDT/BTCUSDT-trades-[0-9]{4}-[0-9]{2}' | head -5
+          echo
+          echo "=== Binance klines 1s probe (recent 3 candles) ==="
+          curl -s --max-time 10 "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=3" | head -c 500
+          echo
+          echo "=== Binance Vision klines 1s listing ==="
+          curl -s --max-time 15 "https://data.binance.vision/?prefix=data/spot/monthly/klines/BTCUSDT/1s/" | grep -oE 'BTCUSDT-1s-[0-9]{4}-[0-9]{2}' | head -5
