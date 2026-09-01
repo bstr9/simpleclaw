@@ -1,0 +1,67 @@
+name: Tushare Data Fetcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_name:
+        description: 'Tushare API name (e.g. trade_cal, daily)'
+        required: true
+        default: 'trade_cal'
+      params_json:
+        description: 'API params as JSON string'
+        required: false
+        default: '{}'
+      fields:
+        description: 'Fields to return (empty = all)'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch from Tushare
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          pip install requests -q
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          api_name = "${{ inputs.api_name }}"
+          params = json.loads("${{ inputs.params_json }}")
+          fields = "${{ inputs.fields }}"
+          token = os.environ.get("TUSHARE_TOKEN", "")
+
+          payload = {
+              "api_name": api_name,
+              "token": token,
+              "params": params,
+              "fields": fields,
+          }
+
+          # Try both endpoints
+          result = None
+          for endpoint in ["http://api.tushare.pro", "http://api.waditu.com"]:
+              try:
+                  req = urllib.request.Request(
+                      endpoint,
+                      data=json.dumps(payload).encode(),
+                      headers={"Content-Type": "application/json"},
+                  )
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      result = json.loads(resp.read().decode())
+                      print(f"Endpoint: {endpoint} -> HTTP {resp.status}")
+                      break
+              except Exception as e:
+                  print(f"{endpoint} failed: {e}")
+
+          if result:
+              print("=" * 50)
+              print("RESULT_JSON_BEGIN")
+              print(json.dumps(result, ensure_ascii=False, indent=2))
+              print("RESULT_JSON_END")
+          else:
+              print("All endpoints failed")
+              exit(1)
+          PYEOF
