@@ -1,0 +1,120 @@
+name: Tushare Batch Fetcher
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'BATCH_REQ'
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Run batch fetch
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, time, urllib.request, datetime
+
+          token = os.environ.get("TUSHARE_TOKEN", "")
+          tasks = []
+          with open("BATCH_REQ", "r") as f:
+              for line in f:
+                  line = line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  tasks.append(json.loads(line))
+
+          print(f"Loaded {len(tasks)} tasks")
+          results = {"started": datetime.datetime.now().isoformat(), "items": [], "errors": []}
+
+          for i, task in enumerate(tasks):
+              api = task.get("api")
+              params = task.get("params", {})
+              fields = task.get("fields", "")
+              payload = {"api_name": api, "token": token, "params": params, "fields": fields}
+
+              ok = False
+              for attempt in range(3):
+                  try:
+                      req = urllib.request.Request(
+                          "http://api.tushare.pro",
+                          data=json.dumps(payload).encode(),
+                          headers={"Content-Type": "application/json"},
+                      )
+                      with urllib.request.urlopen(req, timeout=30) as resp:
+                          data = json.loads(resp.read().decode())
+                      if data.get("code") == 0:
+                          rows = data["data"]["fields"]
+                          items = data["data"]["items"]
+                          results["items"].append({
+                              "task_index": i, "api": api, "params": params,
+                              "fields": rows, "rows": items, "count": len(items),
+                          })
+                          print(f"[{i+1}/{len(tasks)}] {api} {params} -> {len(items)} rows")
+                          ok = True
+                      else:
+                          msg = data.get("msg", "unknown")
+                          # rate limit / token issue: wait and retry
+                          if attempt < 2:
+                              print(f"[{i+1}] code={data['code']} msg={msg}, retry in 15s...")
+                              time.sleep(15)
+                              continue
+                          results["errors"].append({"task_index": i, "api": api, "params": params, "msg": msg})
+                          print(f"[{i+1}/{len(tasks)}] {api} FAILED: {msg}")
+                      break
+                  except Exception as e:
+                      if attempt < 2:
+                          time.sleep(10)
+                      else:
+                          results["errors"].append({"task_index": i, "api": api, "error": str(e)})
+                          print(f"[{i+1}/{len(tasks)}] {api} EXC: {e}")
+
+              # rate limit protection: ~1.2 req/sec
+              time.sleep(0.8)
+
+          results["finished"] = datetime.datetime.now().isoformat()
+          results["total"] = len(tasks)
+          results["success"] = sum(1 for x in results["items"])
+          results["failed"] = len(results["errors"])
+
+          ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+          outfile = f"batch_results/result_{ts}.json"
+          os.makedirs("batch_results", exist_ok=True)
+          with open(outfile, "w") as f:
+              json.dump(results, f, ensure_ascii=False)
+
+          # also save a compact summary
+          with open("batch_results/latest_summary.txt", "w") as f:
+              f.write(f"total={results['total']} success={results['success']} failed={results['failed']}\n")
+              for item in results["items"]:
+                  f.write(f"  {item['api']} {json.dumps(item['params'], ensure_ascii=False)} -> {item['count']} rows\n")
+              for err in results["errors"]:
+                  f.write(f"  ERROR: {err}\n")
+
+          with open("BATCH_RESULT_PATH", "w") as f:
+              f.write(outfile)
+          print(f"SAVED: {outfile}")
+          print(f"SUMMARY: total={results['total']} success={results['success']} failed={results['failed']}")
+          PYEOF
+
+      - name: Commit results back
+        run: |
+          git config user.name "tushare-bot"
+          git config user.email "bot@actions.local"
+          RESULT_PATH=$(cat BATCH_RESULT_PATH)
+          git add batch_results/ "$RESULT_PATH"
+          git commit -q -m "batch results $(date +%Y%m%d_%H%M%S)" || echo "nothing to commit"
+          git push -q origin main || (git pull -q --rebase origin main && git push -q origin main)
+          echo "COMMITTED: $RESULT_PATH"
