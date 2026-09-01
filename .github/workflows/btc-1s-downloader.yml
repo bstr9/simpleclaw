@@ -53,7 +53,7 @@ jobs:
           for MONTH in "${MONTH_ARR[@]}"; do
             M="$MONTH"
             FILE="BTCUSDT-trades-${YEAR}-${M}.zip"
-            URL="https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/${YEAR}-${M}/${FILE}"
+            URL="https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/${FILE}"
             echo "=== Downloading $FILE ==="
             curl -s --max-time 300 --retry 3 -o "/tmp/${FILE}" "$URL"
             SIZE=$(stat -c%s "/tmp/${FILE}" 2>/dev/null || echo 0)
