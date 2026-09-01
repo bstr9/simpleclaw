@@ -48,7 +48,7 @@ jobs:
           echo "YEAR=$YEAR, MONTHS=$MONTHS"
           IFS=',' read -ra MONTH_ARR <<< "$MONTHS"
           for MONTH in "${MONTH_ARR[@]}"; do
-            M=$(printf "%02d" "$MONTH")
+            M="$MONTH"
             FILE="BTCUSDT-trades-${YEAR}-${M}.zip"
             URL="https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/${YEAR}-${M}/${FILE}"
             echo "=== Downloading $FILE ==="
