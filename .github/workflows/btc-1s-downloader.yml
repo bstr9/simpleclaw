@@ -1,0 +1,121 @@
+name: BTC 1s OHLCV Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Year (e.g. 2017)'
+        required: true
+      months:
+        description: 'Comma-separated months (e.g. 08,09,10)'
+        required: true
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      max-parallel: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ github.token }}
+          fetch-depth: 1
+
+      - name: Install tools
+        run: |
+          pip install -q polars pyarrow
+
+      - name: Download and convert trades to 1s OHLCV
+        env:
+          YEAR: ${{ inputs.year }}
+          MONTHS: ${{ inputs.months }}
+        run: |
+          mkdir -p btc_1s
+          IFS=',' read -ra MONTH_ARR <<< "$MONTHS"
+          for MONTH in "${MONTH_ARR[@]}"; do
+            M=$(printf "%02d" "$MONTH")
+            FILE="BTCUSDT-trades-${YEAR}-${M}.zip"
+            URL="https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/${YEAR}-${M}/${FILE}"
+            echo "=== Downloading $FILE ==="
+            curl -s --max-time 300 --retry 3 -o "/tmp/${FILE}" "$URL"
+            SIZE=$(stat -c%s "/tmp/${FILE}" 2>/dev/null || echo 0)
+            echo "size: $SIZE bytes"
+            if [ "$SIZE" -lt 1000 ]; then
+              echo "SKIP: file too small or missing"
+              continue
+            fi
+            cd /tmp && unzip -q -o "$FILE"
+            CSV="BTCUSDT-trades-${YEAR}-${M}.csv"
+            ls -la "$CSV"
+            python3 << PYEOF
+          import polars as pl
+          import os
+
+          csv = "${CSV}"
+          out_name = "btcusdt_1s_${YEAR}-${M}.parquet"
+
+          df = pl.read_csv(
+              csv,
+              has_header=True,
+              columns=[0, 1, 2, 3, 4],
+              new_columns=["id", "price", "qty", "quote_qty", "timestamp_ms"],
+              schema_overrides={"id": pl.Int64, "price": pl.Float64, "qty": pl.Float64,
+                                "quote_qty": pl.Float64, "timestamp_ms": pl.Int64},
+          )
+          print(f"trades: {len(df)}")
+
+          # timestamp_ms -> second bucket
+          df = df.with_columns((pl.col("timestamp_ms") // 1000).alias("ts_sec"))
+
+          ohlcv = (
+              df.sort("timestamp_ms")
+              .group_by("ts_sec", maintain_order=True)
+              .agg([
+                  pl.col("price").first().alias("open"),
+                  pl.col("price").max().alias("high"),
+                  pl.col("price").min().alias("low"),
+                  pl.col("price").last().alias("close"),
+                  pl.col("qty").sum().alias("volume"),
+                  pl.col("quote_qty").sum().alias("quote_volume"),
+                  pl.len().alias("trade_count"),
+                  pl.col("timestamp_ms").first().alias("first_trade_ms"),
+                  pl.col("timestamp_ms").last().alias("last_trade_ms"),
+              ])
+          )
+          print(f"1s bars: {len(ohlcv)}")
+
+          # human-readable time
+          ohlcv = ohlcv.with_columns(
+              (pl.from_epoch(pl.col("ts_sec"), time_unit="s")).cast(pl.String).alias("datetime_utc")
+          )
+          ohlcv.select(["ts_sec", "datetime_utc", "open", "high", "low", "close",
+                         "volume", "quote_volume", "trade_count",
+                         "first_trade_ms", "last_trade_ms"]).write_parquet(f"/tmp/{out_name}")
+
+          sz = os.path.getsize(f"/tmp/{out_name}")
+          print(f"saved {out_name}: {sz/1024/1024:.1f} MB")
+          PYEOF
+            cp "/tmp/${out_name}" btc_1s/ 2>/dev/null || true
+            # cleanup temp
+            rm -f "/tmp/${FILE}" "/tmp/${CSV}" "/tmp/${out_name}"
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: btc-1s-${{ inputs.year }}-${{ inputs.months }}
+          path: btc_1s/*.parquet
+          retention-days: 1
+          compression-level: 0
+
+      - name: Cleanup trigger
+        run: |
+          rm -f CRYPTO_BATCH
+          git config user.name "data-bot"
+          git config user.email "bot@actions.local"
+          git add -A
+          git commit -q -m "cleanup" || echo "nothing to commit"
