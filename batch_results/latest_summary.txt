@@ -1,0 +1,2 @@
+total=1 success=0 failed=1
+  ERROR: {'task_index': 0, 'api': 'trade_cal', 'params': {'exchange': 'SSE', 'start_date': '20250101', 'end_date': '20250201'}, 'msg': '您上传Token！'}
