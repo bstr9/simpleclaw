@@ -13,6 +13,9 @@ on:
     paths:
       - 'BTC_BATCH'
 
+permissions:
+  contents: write
+
 jobs:
   download:
     runs-on: ubuntu-latest

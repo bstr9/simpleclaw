@@ -1,0 +1,16 @@
+name: URL Probe
+on:
+  push:
+    paths: ['PROBE_REQ']
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check URLs
+        run: |
+          for U in \
+            "https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/BTCUSDT-trades-2017-08.zip" \
+            "https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/2017-08/BTCUSDT-trades-2017-08.zip" ; do
+            echo "--- $U"
+            curl -sI --max-time 15 "$U" | head -3
+          done
