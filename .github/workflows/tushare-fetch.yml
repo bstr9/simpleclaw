@@ -4,51 +4,53 @@ on:
   workflow_dispatch:
     inputs:
       api_name:
-        description: 'Tushare API name (e.g. trade_cal, daily)'
+        description: 'Tushare API name'
         required: true
         default: 'trade_cal'
       params_json:
-        description: 'API params as JSON string'
+        description: 'API params JSON'
         required: false
         default: '{}'
-      fields:
-        description: 'Fields to return (empty = all)'
-        required: false
-        default: ''
+  push:
+    paths:
+      - 'TUSHARE_REQ'
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse request from commit message
+        id: parse
+        run: |
+          MSG="$(git log -1 --pretty=%B | tr -d '\r' | head -1)"
+          echo "API=$(echo "$MSG" | cut -d' ' -f2)" >> $GITHUB_OUTPUT
+          echo "PARAMS=$(echo "$MSG" | cut -d' ' -f3-)" >> $GITHUB_OUTPUT
+
       - name: Fetch from Tushare
         env:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
-          pip install requests -q
           python3 << 'PYEOF'
           import json, os, urllib.request
 
-          api_name = "${{ inputs.api_name }}"
-          params = json.loads("${{ inputs.params_json }}")
-          fields = "${{ inputs.fields }}"
+          api_name = "${{ steps.parse.outputs.API }}" or "trade_cal"
+          params_raw = "${{ steps.parse.outputs.PARAMS }}" or "{}"
+          try:
+              params = json.loads(params_raw)
+          except Exception:
+              params = {}
           token = os.environ.get("TUSHARE_TOKEN", "")
 
-          payload = {
-              "api_name": api_name,
-              "token": token,
-              "params": params,
-              "fields": fields,
-          }
+          payload = {"api_name": api_name, "token": token, "params": params, "fields": ""}
 
-          # Try both endpoints
           result = None
           for endpoint in ["http://api.tushare.pro", "http://api.waditu.com"]:
               try:
-                  req = urllib.request.Request(
-                      endpoint,
-                      data=json.dumps(payload).encode(),
-                      headers={"Content-Type": "application/json"},
-                  )
+                  req = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
+                      headers={"Content-Type": "application/json"})
                   with urllib.request.urlopen(req, timeout=30) as resp:
                       result = json.loads(resp.read().decode())
                       print(f"Endpoint: {endpoint} -> HTTP {resp.status}")
@@ -56,12 +58,8 @@ jobs:
               except Exception as e:
                   print(f"{endpoint} failed: {e}")
 
-          if result:
-              print("=" * 50)
-              print("RESULT_JSON_BEGIN")
-              print(json.dumps(result, ensure_ascii=False, indent=2))
-              print("RESULT_JSON_END")
-          else:
-              print("All endpoints failed")
-              exit(1)
+          print("=" * 50)
+          print("RESULT_JSON_BEGIN")
+          print(json.dumps(result, ensure_ascii=False, indent=2) if result else "ALL FAILED")
+          print("RESULT_JSON_END")
           PYEOF
