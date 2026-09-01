@@ -66,7 +66,7 @@ jobs:
             CSV="BTCUSDT-trades-${YEAR}-${M}.csv"
             ls -la "$CSV"
             OUT_NAME="btcusdt_1s_${YEAR}-${M}.parquet"
-            python3 /tmp/convert.py "$CSV" "/tmp/${OUT_NAME}"
+            python3 "$GITHUB_WORKSPACE/convert.py" "$CSV" "/tmp/${OUT_NAME}"
             cp "/tmp/${OUT_NAME}" btc_1s/
             rm -f "/tmp/${FILE}" "/tmp/${CSV}" "/tmp/${OUT_NAME}"
             cd "$GITHUB_WORKSPACE"
