@@ -78,7 +78,7 @@ jobs:
         with:
           name: btc-1s-${{ env.YEAR }}-${{ env.MONTHS }}
           path: btc_1s/*.parquet
-          retention-days: 1
+          retention-days: 90
           compression-level: 0
 
       - name: Write result marker
@@ -86,7 +86,10 @@ jobs:
           echo "done_${YEAR}_${MONTHS}=$(date +%s)" > BTC_BATCH_DONE
           git config user.name "data-bot"
           git config user.email "bot@actions.local"
-          git add "$GITHUB_WORKSPACE/btc_1s/" BTC_BATCH_DONE
-          git commit -q -m "results ${YEAR}-${MONTHS}" || echo "nothing"
+          echo "done_${YEAR}_${MONTHS}=$(date +%s)" > BTC_BATCH_DONE
+          git config user.name "data-bot"
+          git config user.email "bot@actions.local"
+          git add BTC_BATCH_DONE
+          git commit -q -m "results marker ${YEAR}-${MONTHS}" || echo "nothing"
           git push -q origin main || (git pull -q --rebase origin main && git push -q origin main)
-          echo "DONE - results committed to repo btc_1s/"
+          echo "DONE - artifact uploaded (90d retention)"
