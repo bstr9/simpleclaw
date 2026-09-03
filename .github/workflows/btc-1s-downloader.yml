@@ -83,13 +83,22 @@ jobs:
 
       - name: Write result marker
         run: |
-          echo "done_${YEAR}_${MONTHS}=$(date +%s)" > BTC_BATCH_DONE
           git config user.name "data-bot"
           git config user.email "bot@actions.local"
+          # split files > 90MB into chunks; merge locally with cat
+          cd "$GITHUB_WORKSPACE/btc_1s"
+          for f in *.parquet; do
+            SZ=$(stat -c%s "$f")
+            if [ "$SZ" -gt 94000000 ]; then
+              echo "splitting $f ($SZ bytes)"
+              split -b 90m -d -a 2 "$f" "${f}.part-"
+              rm -f "$f"
+            fi
+          done
+          ls -la
+          cd "$GITHUB_WORKSPACE"
           echo "done_${YEAR}_${MONTHS}=$(date +%s)" > BTC_BATCH_DONE
-          git config user.name "data-bot"
-          git config user.email "bot@actions.local"
-          git add BTC_BATCH_DONE
-          git commit -q -m "results marker ${YEAR}-${MONTHS}" || echo "nothing"
+          git add btc_1s/ BTC_BATCH_DONE
+          git commit -q -m "results ${YEAR}-${MONTHS}" || echo "nothing"
           git push -q origin main || (git pull -q --rebase origin main && git push -q origin main)
-          echo "DONE - artifact uploaded (90d retention)"
+          echo "DONE - results committed"
