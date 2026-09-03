@@ -4,19 +4,18 @@ import os
 
 csv, out = sys.argv[1], sys.argv[2]
 
-# Binance Vision trades CSV: 新格式有header, 老格式无header(6列: id,price,qty,quote_qty,timestamp,is_buyer_maker)
-# 用read_csv_batched分块读，避免13GB CSV进7GB内存
 with open(csv) as f:
     first = f.readline()
-
 HAS_HEADER = first.split(",")[0] == "id"
 
 def process_batch(df):
     df = df.select([pl.col(df.columns[1]), pl.col(df.columns[2]),
                     pl.col(df.columns[3]), pl.col(df.columns[4])])
     df.columns = ["price", "qty", "quote_qty", "timestamp"]
+    # Binance trades timestamp: 毫秒(13位, <=2024) 或 微秒(16位, >=2025)
+    DIV = pl.when(pl.col("timestamp") > 10**15).then(1_000_000).otherwise(1_000)
     return (
-        df.with_columns((pl.col("timestamp") // 1000).alias("ts_sec"))
+        df.with_columns((pl.col("timestamp") // DIV).alias("ts_sec"))
         .sort("timestamp")
         .group_by("ts_sec", maintain_order=True)
         .agg([
