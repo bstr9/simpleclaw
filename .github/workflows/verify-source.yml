@@ -1,0 +1,16 @@
+name: Verify 2023-03 source
+on:
+  push:
+    paths: ['VERIFY_REQ']
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: download and count
+        run: |
+          curl -s --max-time 300 -o /tmp/z.zip "https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/BTCUSDT-trades-2023-03.zip"
+          ls -la /tmp/z.zip
+          cd /tmp && unzip -q -o z.zip
+          wc -l BTCUSDT-trades-2023-03.csv
+          head -2 BTCUSDT-trades-2023-03.csv
+          tail -2 BTCUSDT-trades-2023-03.csv
