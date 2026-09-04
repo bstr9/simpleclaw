@@ -1,38 +1,29 @@
-name: Fetch 2023-03 daily trades 13-31
+name: Check 2018-02 gap vs 1m klines
 on:
   push:
     paths: ['VERIFY_REQ']
 jobs:
-  fetch:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
     steps:
-      - name: download and merge dailies
+      - name: compare
         run: |
-          pip install -q polars pyarrow
-          cd /tmp
-          for D in 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31; do
-            FILE="BTCUSDT-trades-2023-03-$D.zip"
-            curl -s --max-time 200 --retry 2 -o "$FILE" "https://data.binance.vision/data/spot/daily/trades/BTCUSDT/$FILE"
-            SZ=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
-            if [ "$SZ" -lt 1000 ]; then echo "SKIP $FILE ($SZ)"; continue; fi
-            unzip -q -o "$FILE"
-            echo "got $FILE: $SZ bytes"
-          done
-          ls -la BTCUSDT-trades-2023-03-*.csv 2>/dev/null | head -20
-          # 合并全部日CSV（无header老格式6列）
-          cat BTCUSDT-trades-2023-03-*.csv > merged_2023_03b.csv
-          wc -l merged_2023_03b.csv
-      - name: convert
-        run: |
-          cd /tmp
-          git clone -q --depth 1 https://github.com/bstr9/simpleclaw.git sc 2>/dev/null || true
-          python3 sc/convert.py merged_2023_03b.csv /tmp/btcusdt_1s_2023-03b.parquet
-          ls -la /tmp/btcusdt_1s_2023-03b.parquet
-      - name: upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: btc-1s-2023-03b
-          path: /tmp/btcusdt_1s_2023-03b.parquet
-          retention-days: 90
-          compression-level: 0
+          pip install -q polars
+          # 下载官方1m klines月包（独立于trades的数据源视角）
+          curl -s --max-time 120 -o /tmp/k.zip "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1m/BTCUSDT-1m-2018-02.zip"
+          cd /tmp && unzip -q -o k.zip
+          python3 - << 'EOF'
+          import polars as pl
+          df = pl.read_csv("/tmp/BTCUSDT-1m-2018-02.csv", has_header=False,
+                           schema_overrides={"column_1": pl.Int64})
+          # open_time在col_0( ms )；无成交的分钟Binance通常不给bar
+          df = df.select(pl.col("column_1").alias("open_ms"))
+          df = df.with_columns((pl.col("open_ms")//1000).alias("sec"))
+          lo, hi = df["sec"].min(), df["sec"].max()
+          print("1m klines范围:", lo, hi)
+          d = df["sec"].diff().max()
+          print("1m klines最大间隔(秒):", d)
+          # 空隙位置
+          df2 = df.with_columns(pl.col("sec").diff().alias("gap")).filter(pl.col("gap")>86400)
+          print(df2)
+          EOF
