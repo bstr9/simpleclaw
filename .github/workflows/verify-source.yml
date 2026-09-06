@@ -1,29 +1,13 @@
-name: Check 2018-02 gap vs 1m klines
+name: Speed test ModelScope
 on:
   push:
     paths: ['VERIFY_REQ']
 jobs:
-  check:
+  speed:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: compare
+      - name: dl speed from modelscope
         run: |
-          pip install -q polars
-          # 下载官方1m klines月包（独立于trades的数据源视角）
-          curl -s --max-time 120 -o /tmp/k.zip "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1m/BTCUSDT-1m-2018-02.zip"
-          cd /tmp && unzip -q -o k.zip
-          python3 - << 'EOF'
-          import polars as pl
-          df = pl.read_csv("/tmp/BTCUSDT-1m-2018-02.csv", has_header=False,
-                           schema_overrides={"column_1": pl.Int64})
-          # open_time在col_0( ms )；无成交的分钟Binance通常不给bar
-          df = df.select(pl.col("column_1").alias("open_ms"))
-          df = df.with_columns((pl.col("open_ms")//1000).alias("sec"))
-          lo, hi = df["sec"].min(), df["sec"].max()
-          print("1m klines范围:", lo, hi)
-          d = df["sec"].diff().max()
-          print("1m klines最大间隔(秒):", d)
-          # 空隙位置
-          df2 = df.with_columns(pl.col("sec").diff().alias("gap")).filter(pl.col("gap")>86400)
-          print(df2)
-          EOF
+          curl -sL --max-time 30 -o /dev/null -w "runner->ModelScope: %{speed_download} B/s (%{size_download} bytes)\n" "https://modelscope.cn/models/ZhipuAI/GLM-5.3/resolve/master/model-00001-of-00141.safetensors"
+          curl -sL --max-time 30 -o /dev/null -w "runner->ModelScope again: %{speed_download} B/s\n" "https://modelscope.cn/models/ZhipuAI/GLM-5.3/resolve/master/model-00010-of-00141.safetensors"
