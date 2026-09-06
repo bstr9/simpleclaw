@@ -1,0 +1,35 @@
+name: GLM-5.3 Shard Fetcher
+on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: 'Shard numbers, comma-separated e.g. 5,6,7,8'
+        required: true
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      max-parallel: 10
+      matrix:
+        shard: ${{ fromJSON(format('[{0}]', inputs.shards)) }}
+    steps:
+      - name: Download shard from ModelScope
+        run: |
+          N=$(printf "%05d" ${{ matrix.shard }})
+          F="model-${N}-of-00141.safetensors"
+          echo "downloading $F"
+          curl -sL --max-time 2400 --retry 3 -o "/tmp/$F" \
+            "https://modelscope.cn/models/ZhipuAI/GLM-5.3/resolve/master/$F"
+          SZ=$(stat -c%s "/tmp/$F")
+          echo "size: $SZ"
+          [ "$SZ" -gt 4000000000 ] || (echo "TOO SMALL, abort" && exit 1)
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: glm53-shard-${{ matrix.shard }}
+          path: /tmp/model-*-of-00141.safetensors
+          retention-days: 7
+          compression-level: 0
