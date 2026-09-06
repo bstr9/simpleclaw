@@ -1,20 +1,30 @@
 name: GLM-5.3 Shard Fetcher
 on:
-  workflow_dispatch:
-    inputs:
-      shards:
-        description: 'Shard numbers, comma-separated e.g. 5,6,7,8'
-        required: true
+  push:
+    paths: ['GLM_BATCH']
 permissions:
   contents: read
 jobs:
+  parse:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.p.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          MSG="$(git log -1 --pretty=%B | tr -d '\r' | head -1)"
+          S=$(echo "$MSG" | awk '{print $2}')
+          echo "shards=$S" >> $GITHUB_OUTPUT
+          echo "parsed shards: $S"
   fetch:
+    needs: parse
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
       max-parallel: 10
       matrix:
-        shard: ${{ fromJSON(format('[{0}]', inputs.shards)) }}
+        shard: ${{ fromJSON(format('[{0}]', needs.parse.outputs.shards)) }}
     steps:
       - name: Download shard from ModelScope
         run: |
