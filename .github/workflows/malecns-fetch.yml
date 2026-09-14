@@ -14,6 +14,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            MALECNS_REQ
+          sparse-checkout-cone-mode: false
 
       - name: Read request
         id: req
