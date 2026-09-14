@@ -1,0 +1,74 @@
+name: MaleCNS Fetch
+
+permissions:
+  contents: write
+
+on:
+  push:
+    paths: ['MALECNS_REQ']
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read request
+        id: req
+        run: |
+          mode=$(head -n1 MALECNS_REQ | tr -d '[:space:]')
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "MODE=$mode"
+
+      - name: Probe download page
+        if: steps.req.outputs.mode == 'probe'
+        run: |
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+          mkdir -p malecns/probe
+          for u in "https://male-cns.janelia.org/download/" "https://male-cns.janelia.org/" ; do
+            n=$(echo "$u" | md5sum | cut -c1-8)
+            curl -sL -m 90 -A "$UA" "$u" -o "malecns/probe/page-$n.html" -w "$u -> HTTP %{http_code} %{size_download}\n" || echo "$u -> FAIL"
+          done
+          # 汇总所有链接
+          { for p in malecns/probe/page-*.html; do
+              grep -oE 'href="[^"]+"' "$p" | sed 's/^href="//; s/"$//'
+            done; } | sort -u > malecns/probe/all-links.txt
+          wc -l malecns/probe/all-links.txt
+          cat malecns/probe/all-links.txt | head -200
+
+      - name: Fetch files
+        if: steps.req.outputs.mode == 'fetch'
+        run: |
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+          mkdir -p malecns
+          tail -n +2 MALECNS_REQ | grep -E '^https?://' | while read -r u; do
+            f=$(basename "${u%%\?*}")
+            [ -z "$f" ] && continue
+            echo "GET $u"
+            curl -sL --retry 3 --retry-delay 5 -m 1800 -A "$UA" "$u" -o "malecns/$f" -w "  -> HTTP %{http_code} %{size_download} bytes\n" || echo "  -> FAIL $u"
+          done
+          ls -la malecns/
+
+      - name: Split files >90MB
+        run: |
+          cd malecns 2>/dev/null || exit 0
+          find . -maxdepth 2 -type f -size +94371840c | while read -r f; do
+            case "$f" in *.part-*) continue;; esac
+            echo "SPLIT $f ($(stat -c%s "$f") bytes)"
+            split -b 90m -d -a 2 "$f" "$f.part-"
+            rm "$f"
+          done
+
+      - name: Commit results
+        run: |
+          git config user.name "malecns-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A malecns/
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "malecns ${{ steps.req.outputs.mode }}"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && { echo PUSHED; break; }
+            sleep 15
+          done
