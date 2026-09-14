@@ -43,13 +43,17 @@ jobs:
         run: |
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
           mkdir -p malecns
+          : > malecns/sizes.txt
           tail -n +2 MALECNS_REQ | grep -E '^https?://' | while read -r u; do
             f=$(basename "${u%%\?*}")
             [ -z "$f" ] && continue
-            echo "GET $u"
+            sz=$(curl -sIL -m 60 -A "$UA" "$u" | grep -i content-length | tail -1 | tr -dc '0-9')
+            echo "$f $sz $u" >> malecns/sizes.txt
+            echo "GET $u ($(( sz / 1048576 )) MB)"
             curl -sL --retry 3 --retry-delay 5 -m 1800 -A "$UA" "$u" -o "malecns/$f" -w "  -> HTTP %{http_code} %{size_download} bytes\n" || echo "  -> FAIL $u"
           done
-          ls -la malecns/
+          cat malecns/sizes.txt
+          ls -la malecns/ && df -h / | tail -1
 
       - name: Split files >90MB
         run: |
