@@ -3,6 +3,8 @@ permissions:
   contents: write
 on:
   workflow_dispatch: {}
+  push:
+    paths: ['BINANCE_PROBE_REQ']
 jobs:
   probe:
     runs-on: ubuntu-latest
