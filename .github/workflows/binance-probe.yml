@@ -1,0 +1,27 @@
+name: Binance Data Probe
+permissions:
+  contents: write
+on:
+  workflow_dispatch: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+      - name: Probe bookDepth
+        run: |
+          curl -sI 'https://data.binance.vision/data/spot/monthly/bookDepth/BTCUSDT/BTCUSDT-bookDepth-2025-06.zip' | head -5
+          curl -s 'https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=5' | head -c 200
+          echo
+      - name: Commit findings
+        run: |
+          git config user.name probe-bot; git config user.email bot@x
+          curl -sI 'https://data.binance.vision/data/spot/monthly/bookDepth/BTCUSDT/BTCUSDT-bookDepth-2025-06.zip' > PROBE_RESULT.txt || true
+          curl -s 'https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=5' >> PROBE_RESULT.txt || true
+          git add PROBE_RESULT.txt
+          git diff --cached --quiet || git commit -m 'binance probe'
+          git push origin HEAD:main || true
