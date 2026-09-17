@@ -1,0 +1,44 @@
+name: Altcoin Kline Fetch
+permissions:
+  contents: write
+on:
+  push:
+    paths: ['ALT_FETCH_REQ']
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+      - name: Fetch altcoin 1m klines from Bybit + OKX (high-vol small caps)
+        run: |
+          sudo apt-get install -y jq >/dev/null 2>&1 || true
+          mkdir -p altcoin_data
+          # 高波动小众币 (Bybit现货): DOGE, PEPE, WIF, BONK, FLOKI, TURBO, BRETT, POPCAT, MOG, 1000SATS
+          SYMBOLS="DOGEUSDT PEPEUSDT WIFUSDT BONKUSDT FLOKIUSDT TURBOUSDT BRETTUSDT POPCATUSDT MOGUSDT 1000SATSUSDT"
+          for SYM in $SYMBOLS; do
+            echo "=== $SYM Bybit spot 1m ==="
+            # Bybit v5 kline: interval=1, 最多1000根/请求; 拉最近30天(1440根用2页)
+            curl -s --max-time 15 "https://api.bybit.com/v5/market/kline?category=spot&symbol=${SYM}&interval=1&limit=1000" > altcoin_data/${SYM}_recent.json
+            head -c 150 altcoin_data/${SYM}_recent.json; echo
+            # 再拉一页(下一页end=最早那根的时间)
+            END=$(jq -r '.result.list[-1][0] // empty' altcoin_data/${SYM}_recent.json 2>/dev/null)
+            if [ -n "$END" ]; then
+              curl -s --max-time 15 "https://api.bybit.com/v5/market/kline?category=spot&symbol=${SYM}&interval=1&limit=1000&end=${END}" > altcoin_data/${SYM}_page2.json
+            fi
+            # OKX 对应币种(USDT对) 1m 历史
+            OKXID=$(echo $SYM | sed 's/USDT/-USDT/')
+            echo "=== $OKXID OKX 1m ==="
+            curl -s --max-time 15 "https://www.okx.com/api/v5/market/candles?instId=${OKXID}&bar=1m&limit=300" > altcoin_data/OKX_${SYM}_recent.json
+            head -c 150 altcoin_data/OKX_${SYM}_recent.json; echo
+          done
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: altcoin-klines
+          path: altcoin_data/
+          retention-days: 7
