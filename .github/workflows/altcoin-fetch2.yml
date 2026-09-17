@@ -1,0 +1,42 @@
+name: Altcoin Kline Fetch v2
+permissions:
+  contents: write
+on:
+  push:
+    paths: ['ALT_FETCH_REQ2']
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+      - name: Fetch altcoin klines (no apt, jq-free, set -e safe)
+        run: |
+          mkdir -p altcoin_data
+          # GitHub runner在美国 — OKX/Bybit对US runner通常开放
+          SYMBOLS="DOGEUSDT PEPEUSDT WIFUSDT BONKUSDT FLOKIUSDT TURBOUSDT POPCATUSDT MOGUSDT"
+          for SYM in $SYMBOLS; do
+            echo "=== $SYM Bybit spot 1m x2 pages ==="
+            curl -s --max-time 15 "https://api.bybit.com/v5/market/kline?category=spot&symbol=${SYM}&interval=1&limit=1000" -o altcoin_data/${SYM}_p1.json || echo "bybit $SYM p1 failed"
+            END=$(python3 -c "import json;print(json.load(open('altcoin_data/${SYM}_p1.json'))['result']['list'][-1][0])" 2>/dev/null || true)
+            if [ -n "$END" ]; then
+              curl -s --max-time 15 "https://api.bybit.com/v5/market/kline?category=spot&symbol=${SYM}&interval=1&limit=1000&end=${END}" -o altcoin_data/${SYM}_p2.json || true
+            fi
+            OKXID=$(echo $SYM | sed 's/USDT/-USDT/')
+            echo "=== $OKXID OKX 1m ==="
+            curl -s --max-time 15 "https://www.okx.com/api/v5/market/candles?instId=${OKXID}&bar=1m&limit=300" -o altcoin_data/OKX_${SYM}.json || echo "okx $OKXID failed"
+          done
+          ls -la altcoin_data/ | head -25
+          echo '--- sample ---'
+          head -c 300 altcoin_data/DOGEUSDT_p1.json 2>/dev/null; echo
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: altcoin-klines
+          path: altcoin_data/
+          retention-days: 7
+          if-no-files-found: warn
