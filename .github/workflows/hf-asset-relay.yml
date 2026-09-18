@@ -1,0 +1,80 @@
+name: hf-asset-relay
+on:
+  push:
+    paths: ["hf_relay/BATCH.txt"]
+  workflow_dispatch:
+    inputs:
+      files:
+        description: "LFS paths to fetch (comma-separated, empty=all remaining)"
+        required: false
+        default: ""
+permissions:
+  contents: read
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install hf + aria2
+        run: pip install -U "huggingface_hub[cli]" && sudo apt-get update -qq && sudo apt-get install -y -qq aria2
+      - name: Download LFS assets
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DISABLE_XET: "1"
+        run: |
+          set -e
+          mkdir -p /tmp/assets && cd /tmp/assets
+          python - <<'PY'
+          import os, json, urllib.request
+          tok=os.environ['HF_TOKEN']
+          req=urllib.request.Request(
+            "https://huggingface.co/api/datasets/xlangai/osworld_v2_assets_gated/tree/v2026.08.08?recursive=true",
+            headers={"Authorization":f"Bearer {tok}"})
+          d=json.load(urllib.request.urlopen(req, timeout=60))
+          files=[f for f in d if f['type']=='file' and 'lfs' in f]
+          # skip ones already relayed (committed markers)
+          done=set()
+          if os.path.exists('hf_relay/DONE.txt'):
+              done=set(open('hf_relay/DONE.txt').read().split())
+          todo=[f['path'] for f in files if f['path'] not in done]
+          if os.environ.get('ONLY',''):
+              only=set(os.environ['ONLY'].split(','))
+              todo=[p for p in todo if p in only]
+          json.dump(todo, open('/tmp/todo.json','w'))
+          print(f"todo={len(todo)} done={len(done)}")
+          PY
+          # hf download loop
+          python - <<'PY'
+          import json, os, subprocess, sys
+          from huggingface_hub import hf_hub_download
+          todo=json.load(open('/tmp/todo.json'))
+          fails=[]
+          for i,p in enumerate(todo):
+              try:
+                  hf_hub_download(repo_id="xlangai/osworld_v2_assets_gated", repo_type="dataset",
+                                  revision="v2026.08.08", filename=p, local_dir="/tmp/assets")
+                  print(f"[{i+1}/{len(todo)}] OK {p}", flush=True)
+              except Exception as e:
+                  print(f"[{i+1}/{len(todo)}] FAIL {p}: {e}", flush=True)
+                  fails.append(p)
+          json.dump(fails, open('/tmp/fails.json','w'))
+          sys.exit(1 if len(fails)>50 else 0)
+          PY
+      - name: Split into chunks (900MB tar)
+        run: |
+          set -e
+          cd /tmp
+          B=$(git rev-parse --short HEAD)
+          tar -cf /tmp/relay.tar -C /tmp/assets . 2>/dev/null || tar -cf /tmp/relay.tar -C /tmp/assets $(ls /tmp/assets | grep -v hf_relay || true)
+          split -b 900m -d -a 2 /tmp/relay.tar /tmp/chunk-
+          sha256sum /tmp/relay.tar | awk '{print $1}' > /tmp/relay.sha256
+          ls -la /tmp/chunk-*
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-${{ github.run_id }}
+          path: |
+            /tmp/chunk-*
+            /tmp/relay.sha256
+          retention-days: 90
